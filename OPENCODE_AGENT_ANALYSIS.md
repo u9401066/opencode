@@ -65,27 +65,30 @@
 **這份文件適合誰閱讀？**
 
 | 讀者類型 | 建議章節 |
-|----------|----------|
+| ---------- | ---------- |
 | 🔰 **新手** - 想了解 AI Agent 是什麼 | 引言 → 專案概述 → Agent 架構設計 |
 | 👨‍💻 **開發者** - 想學習實作技巧 | 工具系統 → Session Loop → 權限系統 |
 | 🏗️ **架構師** - 想了解設計決策 | 核心元件 → 基礎設施 → 效能優化 |
 | 🔬 **研究者** - 想深入了解每個細節 | 全部章節，從頭到尾 |
 
 **閱讀時間估計：**
+
 - 快速瀏覽：30 分鐘
 - 完整閱讀：2-3 小時
 - 深入研究 + 實作：1-2 天
 
 ---
 
+<a id="目錄"></a>
+
 ## 📋 目錄
 
-> 💡 **點擊連結可快速跳轉到對應章節**
+> 💡 **點擊連結可快速跳轉到對應章節** | 每個章節結尾都有 [⬆️ 返回目錄](#目錄) 連結
 
 ### 📚 主要章節
 
 | # | 章節 | 說明 |
-|---|------|------|
+| --- | ------ | ------ |
 | 1 | [專案概述](#專案概述) | 技術棧、專案結構、Namespace 模式 |
 | 2 | [Vercel AI SDK 深度解析](#vercel-ai-sdk-深度解析) | Provider、streamText、轉換層 |
 | 3 | [Agent 架構設計](#agent-架構設計) | 5 個內建 Agent、自訂配置 |
@@ -99,7 +102,7 @@
 | 11 | [基礎設施](#基礎設施) | Bus、LSP、Ripgrep、Config |
 | 12 | [Token 管理與 Compaction](#token-管理與-compaction) | 三層壓縮策略 |
 | 13 | [效能優化](#效能優化) | 快取、串流、記憶體管理 |
-| 14 | [Meme 圖解](#meme-圖解) | 趣味圖解 |
+| 14 | [OpenCode Agent 的一天](#-opencode-agent-的一天) | 趣味圖解 |
 | 15 | [技術亮點](#技術亮點) | 設計模式總結 |
 | 16 | [結論](#結論) | 比較、統計、學習價值 |
 | 17 | [參考資源](#參考資源) | 官方文件、延伸閱讀 |
@@ -121,9 +124,9 @@
 <summary><strong>2. Vercel AI SDK 深度解析</strong> (點擊展開)</summary>
 
 - [2.1 為什麼選擇 Vercel AI SDK](#為什麼選擇-vercel-ai-sdk)
-- [2.2 支援的 Provider 列表](#支援的-provider-列表-20-家)
-- [2.3 核心函數 streamText()](#核心函數-streamtext-完整用法)
-- [2.4 Provider 載入機制](#provider-載入機制完整實現)
+- [2.2 支援的 Provider 列表](#支援的-provider-列表)
+- [2.3 核心函數 streamText()](#核心函數streamtext)
+- [2.4 Provider 載入機制](#provider-載入機制)
 - [2.5 Message 轉換層](#message-轉換層-transformts)
 - [2.6 串流事件類型詳解](#串流事件類型詳解)
 
@@ -133,9 +136,9 @@
 <summary><strong>3. Agent 架構設計</strong> (點擊展開)</summary>
 
 - [3.1 整體架構圖](#整體架構圖)
-- [3.2 Agent 定義完整實現](#agent-定義完整實現)
-- [3.3 內建 Agent 詳細設定](#內建-agent-詳細設定-5-個)
-- [3.4 自訂 Agent 配置](#自訂-agent-配置範例)
+- [3.2 Agent 定義完整實現](#agent-定義的完整實現)
+- [3.3 內建 Agent 詳細設定](#內建-agent-詳細設定)
+- [3.4 Agent 協作機制](#-agent-協作機制5-個-agent-如何一起工作)
 - [3.5 🤝 Agent 協作機制](#-agent-協作機制5-個-agent-如何一起工作)
 
 </details>
@@ -154,9 +157,9 @@
 <details>
 <summary><strong>5. 完整執行流程實例</strong> (點擊展開)</summary>
 
-- [5.1 步驟詳解](#步驟-1-用戶輸入)
+- [5.1 執行流程步驟](#step-1-session-接收請求)
 - [5.2 完整流程圖](#完整流程圖)
-- [5.3 Mermaid 時序圖](#mermaid-時序圖)
+- [5.3 Mermaid 時序圖](#mermaid-時序圖元件互動詳解)
 
 </details>
 
@@ -164,8 +167,8 @@
 <summary><strong>6. 工具系統詳解</strong> (點擊展開)</summary>
 
 - [6.1 Tool.define() 核心介面](#tooldefine-核心介面)
-- [6.2 內建工具清單](#內建工具清單)
-- [6.3 工具實作範例](#工具實作範例)
+- [6.2 完整內建工具清單](#完整內建工具清單)
+- [6.3 內建工具實作範例](#內建工具實作範例)
 - [6.4 Tool Context 完整介面](#tool-context-完整介面)
 - [6.5 並行工具執行](#並行工具執行-parallel-tool-execution)
 - [6.6 🌐 WebFetch Tool](#-webfetch-tool-網頁內容擷取)
@@ -291,12 +294,14 @@
 
 ## 專案概述
 
+[⬆️ 返回目錄](#目錄)
+
 OpenCode 是一個開源的 AI 編程助手，類似 Claude Code / Cursor，採用 **Agent Loop** 架構實現自主編程能力。
 
 ### 技術棧
 
 | 技術 | 用途 | 說明 |
-|------|------|------|
+| ------ | ------ | ------ |
 | **Bun** | Runtime | 高效能 JavaScript 執行環境 |
 | **TypeScript** | 語言 | 強型別開發 |
 | **Vercel AI SDK** | AI 整合 | 統一多家 LLM Provider 介面 |
@@ -518,6 +523,8 @@ OpenCode 是一個開源的 AI 編程助手，類似 Claude Code / Cursor，採�
 │                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+```text
 ├── storage/               # 資料持久化
 │   ├── sqlite.ts         # SQLite 資料庫
 │   └── session.ts        # Session 儲存
@@ -551,6 +558,7 @@ const session = await Session.create({ ... })
 ```
 
 **Namespace 的優點：**
+
 1. **Tree-shaking 友善** - 未使用的函數會被移除
 2. **無 this 綁定問題** - 純函數更容易測試
 3. **清晰的模組邊界** - 每個 Namespace 是獨立單元
@@ -604,11 +612,13 @@ const session = await Session.create({ ... })
 
 ## Vercel AI SDK 深度解析
 
+[⬆️ 返回目錄](#目錄)
+
 OpenCode 的核心 AI 能力建立在 **Vercel AI SDK** 之上，這是一個統一多家 LLM Provider 的抽象層。
 
 ### 為什麼選擇 Vercel AI SDK？
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                    傳統做法 (痛苦)                               │
 │                                                                 │
@@ -637,7 +647,7 @@ OpenCode 的核心 AI 能力建立在 **Vercel AI SDK** 之上，這是一個統
 OpenCode 內建支援以下 Provider（來自 `provider.ts`）：
 
 | Provider | SDK 套件 | 說明 |
-|----------|----------|------|
+| ---------- | ---------- | ------ |
 | Anthropic | `@ai-sdk/anthropic` | Claude 系列模型 |
 | OpenAI | `@ai-sdk/openai` | GPT-4o, o1, o3 等 |
 | Google | `@ai-sdk/google` | Gemini 系列 |
@@ -839,6 +849,8 @@ for await (const event of stream.fullStream) {
 ---
 
 ## Agent 架構設計
+
+[⬆️ 返回目錄](#目錄)
 
 ### 整體架構圖
 
@@ -1420,6 +1432,8 @@ Tool.define("task", {
 
 ## 核心元件分析
 
+[⬆️ 返回目錄](#目錄)
+
 ### 1. Session 管理 (`session/`)
 
 Session 是 OpenCode 的核心概念，代表一次完整的對話互動。
@@ -1903,7 +1917,7 @@ Agent Loop 可以用有限狀態機 (FSM) 來理解：
 **狀態說明表：**
 
 | 狀態 | 說明 | 觸發條件 | 可能的下一個狀態 |
-|------|------|----------|------------------|
+| ------ | ------ | ---------- | ------------------ |
 | `IDLE` | 等待用戶輸入 | 初始狀態 | `INITIALIZING` |
 | `INITIALIZING` | 載入 session 和歷史 | 收到用戶輸入 | `CHECK_OVERFLOW` |
 | `CHECK_OVERFLOW` | 檢查 token 是否超限 | 初始化完成 | `COMPACTING` / `PREPARE_TOOLS` |
@@ -2069,7 +2083,7 @@ export namespace System {
 ### 內建 Agent 一覽
 
 | Agent | Mode | 功能 | 權限特點 |
-|-------|------|------|----------|
+| ------- | ------ | ------ | ---------- |
 | `build` | primary | 主要編碼執行 | 完整工具存取 |
 | `plan` | primary | 只讀規劃模式 | 禁止 edit/write |
 | `general` | subagent | 複雜任務研究 | 無 TODO 權限 |
@@ -2081,11 +2095,13 @@ export namespace System {
 
 ## 完整執行流程實例
 
+[⬆️ 返回目錄](#目錄)
+
 讓我們追蹤一個真實請求從輸入到完成的完整流程：
 
 ### 場景：用戶要求「幫我在 utils.ts 加一個 formatDate 函數」
 
-```
+```text
 📝 用戶輸入: "幫我在 utils.ts 加一個 formatDate 函數"
 ```
 
@@ -2248,7 +2264,7 @@ export function formatDate(date: Date): string {
 
 ### 完整流程圖
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────┐
 │                        完整執行流程                                   │
 ├──────────────────────────────────────────────────────────────────────┤
@@ -2416,7 +2432,8 @@ sequenceDiagram
 
 ### 時序圖重點解說
 
-**1. 初始化階段 (Steps 1-6)**
+#### 1. 初始化階段 (Steps 1-6)
+
 ```typescript
 // 從 storage 載入 session 和歷史訊息
 const session = await Session.get(sessionID)
@@ -2429,7 +2446,8 @@ if (SessionCompaction.isOverflow({ messages, model })) {
 }
 ```
 
-**2. 準備階段 (Steps 7-10)**
+#### 2. 準備階段 (Steps 7-10)
+
 ```typescript
 // 解析可用工具
 const tools = await resolveTools(agent, sessionID)
@@ -2440,7 +2458,8 @@ const systemPrompt = await System.build({ agent, cwd: process.cwd() })
 // → 包含環境資訊、agent 指示、工具說明
 ```
 
-**3. LLM 串流階段 (Steps 11-17)**
+#### 3. LLM 串流階段 (Steps 11-17)
+
 ```typescript
 // 使用 Vercel AI SDK 呼叫 LLM
 const stream = LLM.stream({
@@ -2461,7 +2480,8 @@ for await (const event of stream) {
 }
 ```
 
-**4. 權限檢查階段 (Steps 18-25)**
+#### 4. 權限檢查階段 (Steps 18-25)
+
 ```typescript
 const permission = await PermissionNext.check({
   tool: toolCall.name,
@@ -2485,7 +2505,8 @@ switch (permission) {
 }
 ```
 
-**5. 工具執行階段 (Steps 26-31)**
+#### 5. 工具執行階段 (Steps 26-31)
+
 ```typescript
 // 取得工具實例
 const tool = tools[toolCall.name]
@@ -2506,7 +2527,8 @@ await Message.create({
 })
 ```
 
-**6. 循環與完成 (Steps 32-38)**
+#### 6. 循環與完成 (Steps 32-38)
+
 ```typescript
 // 繼續 Loop 直到 LLM 沒有更多 tool calls
 while (hasMoreToolCalls) {
@@ -2520,6 +2542,8 @@ yield { type: "complete" }
 ---
 
 ## 工具系統詳解
+
+[⬆️ 返回目錄](#目錄)
 
 ### 🗺️ 工具依賴關係圖
 
@@ -4351,7 +4375,7 @@ export namespace ToolExecutor {
 **並行執行的限制與注意事項：**
 
 | 情況 | 可否並行 | 原因 |
-|------|----------|------|
+| ------ | ---------- | ------ |
 | 多個 `read` | ✅ 可以 | 只讀操作，無衝突 |
 | 多個 `grep` | ✅ 可以 | 只讀操作，無衝突 |
 | `read` + `grep` | ✅ 可以 | 都是只讀 |
@@ -4363,6 +4387,8 @@ export namespace ToolExecutor {
 ---
 
 ## 錯誤處理完整路徑
+
+[⬆️ 返回目錄](#目錄)
 
 OpenCode 實現了多層錯誤處理機制，確保系統穩定性：
 
@@ -4742,6 +4768,8 @@ async function* executeToolSafely(
 
 ## 權限系統
 
+[⬆️ 返回目錄](#目錄)
+
 OpenCode 實作了精細的權限控制系統，確保 AI 不會執行未授權的操作。
 
 ### 權限規則結構
@@ -4927,6 +4955,8 @@ export namespace SessionProcessor {
 
 ## MCP 整合
 
+[⬆️ 返回目錄](#目錄)
+
 **Model Context Protocol (MCP)** 是 Anthropic 提出的標準協議，讓 AI 助手可以連接外部工具和資料源。OpenCode 完整支援 MCP。
 
 ### 什麼是 MCP？
@@ -5077,6 +5107,8 @@ async function loadMCPTools(serverName: string): Promise<ToolDefinition[]> {
 
 ## Token 管理與 Compaction
 
+[⬆️ 返回目錄](#目錄)
+
 ### 為什麼需要 Compaction？
 
 LLM 有 context window 限制（如 Claude 200K tokens），長對話會超出限制：
@@ -5207,6 +5239,8 @@ export namespace SessionCompaction {
 ---
 
 ## 進階功能
+
+[⬆️ 返回目錄](#目錄)
 
 > 🆕 本章節涵蓋 OpenCode 的進階功能模組
 
@@ -5865,6 +5899,8 @@ const result = await SessionRetry.withRetry(
 ---
 
 ## 基礎設施
+
+[⬆️ 返回目錄](#目錄)
 
 > 🆕 本章節涵蓋 OpenCode 的基礎設施模組
 
@@ -7156,7 +7192,7 @@ OpenCode 支援 OAuth 2.0 + PKCE 來認證 MCP Server（如 Codex）：
 
 ### 🎭 OpenCode Agent 的一天
 
-```
+```text
                     ╔═══════════════════════════════════════╗
                     ║     👨‍💻 User: "修好這個 bug"          ║
                     ╚═══════════════════════════════════════╝
@@ -7193,7 +7229,7 @@ OpenCode 支援 OAuth 2.0 + PKCE 來認證 MCP Server（如 Codex）：
 
 ### 🔄 Doom Loop 防護
 
-```
+```text
     ┌──────────────────────────────────────────────────────────┐
     │  🤖 Agent: edit("file.ts", same_args)  ← 第 1 次          │
     │  🤖 Agent: edit("file.ts", same_args)  ← 第 2 次          │
@@ -7208,7 +7244,7 @@ OpenCode 支援 OAuth 2.0 + PKCE 來認證 MCP Server（如 Codex）：
 
 ### 📊 Token 管理 (Compaction)
 
-```
+```text
     Token 使用量
     ▲
     │
@@ -7230,6 +7266,8 @@ OpenCode 支援 OAuth 2.0 + PKCE 來認證 MCP Server（如 Codex）：
 ---
 
 ## 技術亮點
+
+[⬆️ 返回目錄](#目錄)
 
 ### 1. 🎯 精細權限控制系統
 
@@ -7607,6 +7645,8 @@ export namespace SessionRecovery {
 ---
 
 ## 效能優化
+
+[⬆️ 返回目錄](#目錄)
 
 OpenCode 在多個層面進行了效能優化：
 
@@ -7988,7 +8028,7 @@ async function processRequest() {
 ### 效能優化總結
 
 | 優化項目 | 技術 | 效果 |
-|----------|------|------|
+| ---------- | ------ | ------ |
 | Provider 快取 | LRU Cache | 減少重複 API 呼叫 ~30% |
 | 檔案系統快取 | mtime 驗證 | 讀取速度提升 ~50% |
 | 串流批次處理 | Debounce | UI 更新減少 ~80% |
@@ -7999,6 +8039,8 @@ async function processRequest() {
 ---
 
 ## 結論
+
+[⬆️ 返回目錄](#目錄)
 
 ### OpenCode Agent 架構的設計哲學
 
@@ -8076,22 +8118,26 @@ packages/opencode/src/
 
 OpenCode 是學習現代 AI Agent 架構的絕佳範例：
 
-**1. 架構設計模式**
+#### 1. 架構設計模式
+
 - Namespace 模式的函數式設計
 - Generator 串流處理
 - 插件化架構
 
-**2. AI 整合技術**
+#### 2. AI 整合技術
+
 - Vercel AI SDK 的使用
 - 多 Provider 抽象
 - Function Calling 實現
 
-**3. 工程實踐**
+#### 3. 工程實踐
+
 - TypeScript + Zod 型別安全
 - SQLite 持久化
 - 錯誤處理和恢復
 
-**4. 安全設計**
+#### 4. 安全設計
+
 - 權限系統設計
 - 輸入驗證
 - 危險操作防護
@@ -8134,14 +8180,14 @@ OpenCode 是學習現代 AI Agent 架構的絕佳範例：
 │                              📈 文件統計資訊                                     │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                 │
-│  📝 文件版本: v3.2 (完整版 - 補充 OAuth 與 Storage 圖表)                        │
+│  📝 文件版本: v3.3 (最終編修版 - 加入返回目錄連結)                              │
 │  📅 最後更新: 2026-01-15                                                        │
 │  ✍️ 作者: u9401066 + GitHub Copilot (Claude Opus 4.5)                           │
 │                                                                                 │
 │  📊 統計:                                                                       │
-│  ├── 總行數: 8,100+ 行                                                          │
-│  ├── 總字數: 26,000+ 字                                                         │
-│  ├── 章節數: 17 個主章節                                                        │
+│  ├── 總行數: 8,200+ 行                                                          │
+│  ├── 總字數: 26,500+ 字                                                         │
+│  ├── 章節數: 17 個主章節 (含返回目錄連結)                                       │
 │  ├── 程式碼區塊: 120+ 個                                                        │
 │  ├── ASCII 圖表: 35+ 個 (含 OAuth 流程圖、Storage 結構圖)                       │
 │  └── 表格: 15+ 個                                                               │
@@ -8172,4 +8218,6 @@ OpenCode 是學習現代 AI Agent 架構的絕佳範例：
 
 **🔗 Fork 連結**: [u9401066/opencode](https://github.com/u9401066/opencode)
 
-**本分析由 u9401066 於 2026-01-15 完成**
+---
+
+> 本分析由 u9401066 於 2026-01-15 完成
