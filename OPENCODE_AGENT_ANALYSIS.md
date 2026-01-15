@@ -143,11 +143,11 @@
 <details>
 <summary><strong>4. 核心元件分析</strong> (點擊展開)</summary>
 
-- [4.1 Session 管理](#session-管理)
-- [4.2 Message 儲存](#message-儲存)
-- [4.3 Session Loop 實現](#session-loop-完整實現)
-- [4.4 狀態機圖](#狀態機圖-state-machine)
-- [4.5 System Prompt 組合](#system-prompt-組合)
+- [4.1 Session 管理](#1-session-管理-session)
+- [4.2 Message 儲存](#2-message-儲存-sessionmessagets)
+- [4.3 Session Loop 實現](#3-session-loop-完整實現-sessionpromptts)
+- [4.4 狀態機圖](#35-agent-loop-狀態機圖)
+- [4.5 System Prompt 組合](#4-system-prompt-組合-sessionsystemts)
 
 </details>
 
@@ -177,9 +177,10 @@
 <details>
 <summary><strong>7. 錯誤處理完整路徑</strong> (點擊展開)</summary>
 
-- [7.1 錯誤分類](#錯誤分類)
-- [7.2 ErrorHandler 實現](#errorhandler-完整實現)
-- [7.3 錯誤恢復流程](#錯誤恢復流程圖)
+- [7.1 錯誤分類與處理策略](#錯誤分類與處理策略)
+- [7.2 錯誤處理實現](#錯誤處理實現)
+- [7.3 錯誤處理流程圖](#錯誤處理流程圖)
+- [7.4 錯誤恢復範例](#錯誤恢復範例)
 
 </details>
 
@@ -196,9 +197,11 @@
 <details>
 <summary><strong>9. MCP 整合</strong> (點擊展開)</summary>
 
-- [9.1 MCP 協議說明](#mcp-協議說明)
-- [9.2 設定範例](#mcp-設定範例)
-- [9.3 客戶端實現](#mcp-客戶端實現)
+- [9.1 什麼是 MCP](#什麼是-mcp)
+- [9.2 MCP 設定](#mcp-設定-opencodejson)
+- [9.3 MCP 整合程式碼](#mcp-整合程式碼)
+- [9.4 MCP 工具整合](#mcp-工具整合到-agent)
+- [9.5 MCP 使用範例](#mcp-使用範例)
 
 </details>
 
@@ -229,7 +232,7 @@
 <summary><strong>12. Token 管理與 Compaction</strong> (點擊展開)</summary>
 
 - [12.1 為什麼需要 Compaction](#為什麼需要-compaction)
-- [12.2 三層壓縮策略](#三層壓縮策略)
+- [12.2 Compaction 機制](#compaction-機制)
 - [12.3 Compaction 流程圖](#compaction-流程圖)
 
 </details>
@@ -7889,28 +7892,36 @@ OpenCode 是學習現代 AI Agent 架構的絕佳範例：
 │                              📈 文件統計資訊                                     │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                 │
-│  📝 文件版本: v3.0 (完整版)                                                     │
+│  📝 文件版本: v3.1 (完整版 - 編修版)                                            │
 │  📅 最後更新: 2026-01-15                                                        │
-│  ✍️ 作者: u9401066                                                              │
+│  ✍️ 作者: u9401066 + GitHub Copilot (Claude Opus 4.5)                           │
 │                                                                                 │
 │  📊 統計:                                                                       │
-│  ├── 總行數: 6200+ 行                                                           │
+│  ├── 總行數: 7,900+ 行                                                          │
+│  ├── 總字數: 25,000+ 字                                                         │
 │  ├── 章節數: 17 個主章節                                                        │
-│  ├── 程式碼區塊: 80+ 個                                                         │
-│  ├── 圖表: 15+ 個                                                               │
-│  └── 表格: 10+ 個                                                               │
+│  ├── 程式碼區塊: 120+ 個                                                        │
+│  ├── ASCII 圖表: 30+ 個                                                         │
+│  └── 表格: 15+ 個                                                               │
 │                                                                                 │
 │  📚 涵蓋主題:                                                                   │
 │  ├── 專案結構 (120+ 檔案分析)                                                   │
 │  ├── Vercel AI SDK (20+ Provider)                                               │
-│  ├── Agent 系統 (5 內建 Agent)                                                  │
+│  ├── Agent 系統 (5 內建 Agent + 協作機制)                                       │
 │  ├── Session Loop (完整狀態機)                                                  │
-│  ├── 工具系統 (15+ 工具)                                                        │
+│  ├── 工具系統 (15+ 工具，含 WebFetch/Search/Code)                               │
 │  ├── 權限控制 (Doom Loop 防護)                                                  │
-│  ├── MCP 整合 (Local/Remote)                                                    │
-│  ├── Token 管理 (三層壓縮)                                                      │
-│  ├── 進階功能 (Snapshot, Todo, Skill)                                           │
-│  └── 基礎設施 (Bus, LSP, Storage)                                               │
+│  ├── MCP 整合 (Local/Remote/OAuth)                                              │
+│  ├── Token 管理 (三層壓縮策略)                                                  │
+│  ├── 進階功能 (Snapshot, Todo, Skill, Share)                                    │
+│  └── 基礎設施 (Bus, LSP, Ripgrep, Storage)                                      │
+│                                                                                 │
+│  🎨 圖表類型:                                                                   │
+│  ├── 架構圖 (模組關係、工具依賴、資料流)                                        │
+│  ├── 流程圖 (執行流程、權限檢查、錯誤處理)                                      │
+│  ├── 狀態機圖 (Session Loop FSM)                                                │
+│  ├── 時序圖 (Mermaid)                                                           │
+│  └── 比較表 (Agent、工具、Provider)                                             │
 │                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
