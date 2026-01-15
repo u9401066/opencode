@@ -28,6 +28,7 @@
 OpenCode 是一個開源的 AI 編程助手，類似 Claude Code / Cursor，採用 **Agent Loop** 架構實現自主編程能力。
 
 ### 技術棧
+
 | 技術 | 用途 | 說明 |
 |------|------|------|
 | **Bun** | Runtime | 高效能 JavaScript 執行環境 |
@@ -35,6 +36,130 @@ OpenCode 是一個開源的 AI 編程助手，類似 Claude Code / Cursor，採�
 | **Vercel AI SDK** | AI 整合 | 統一多家 LLM Provider 介面 |
 | **Zod** | Schema 驗證 | 執行時型別檢查 |
 | **Namespace 模式** | 架構 | 模組化組織程式碼 |
+
+### 專案結構詳解
+
+```text
+packages/opencode/src/
+├── agent/                 # Agent 定義層
+│   ├── agent.ts          # Agent 類型定義與內建 agents
+│   └── index.ts          # 匯出入口
+│
+├── session/               # Session 管理層 (核心)
+│   ├── prompt.ts         # 🔑 主要 Loop 入口
+│   ├── processor.ts      # Stream 處理器
+│   ├── llm.ts            # LLM 呼叫封裝
+│   ├── system.ts         # System Prompt 組合
+│   ├── compaction.ts     # Token 壓縮機制
+│   └── message.ts        # 訊息儲存管理
+│
+├── tool/                  # 工具系統層
+│   ├── tool.ts           # Tool.define() 核心介面
+│   ├── registry.ts       # 工具註冊表
+│   ├── bash.ts           # Shell 命令工具
+│   ├── read.ts           # 檔案讀取工具
+│   ├── write.ts          # 檔案寫入工具
+│   ├── edit.ts           # 檔案編輯工具 (含多種 replacer)
+│   ├── grep.ts           # 文字搜尋工具
+│   ├── glob.ts           # 檔案列表工具
+│   ├── task.ts           # 子代理呼叫工具
+│   └── ...               # 其他工具
+│
+├── permission/            # 權限控制層
+│   ├── permission.ts     # 權限類型定義
+│   └── next.ts           # 權限檢查邏輯
+│
+├── provider/              # AI Provider 層
+│   ├── provider.ts       # 多 Provider 支援
+│   └── transform.ts      # 訊息轉換與快取
+│
+├── mcp/                   # MCP 整合層
+│   └── index.ts          # Model Context Protocol 客戶端
+│
+├── config/                # 設定管理
+│   └── config.ts         # opencode.json 解析
+│
+├── storage/               # 資料持久化
+│   ├── sqlite.ts         # SQLite 資料庫
+│   └── session.ts        # Session 儲存
+│
+└── app/                   # 應用入口
+    └── index.ts          # CLI / TUI 啟動
+```
+
+### Namespace 模式說明
+
+OpenCode 採用 TypeScript Namespace 模式組織程式碼，這是一種函數式風格：
+
+```typescript
+// ❌ 傳統 Class 風格
+class SessionService {
+  static async create() { }
+  static async get() { }
+  static async list() { }
+}
+
+// ✅ OpenCode 的 Namespace 風格
+export namespace Session {
+  export async function create() { }
+  export async function get() { }
+  export async function list() { }
+}
+
+// 使用方式
+import { Session } from "./session"
+const session = await Session.create({ ... })
+```
+
+**Namespace 的優點：**
+1. **Tree-shaking 友善** - 未使用的函數會被移除
+2. **無 this 綁定問題** - 純函數更容易測試
+3. **清晰的模組邊界** - 每個 Namespace 是獨立單元
+4. **IDE 自動完成友善** - `Session.` 後會列出所有可用函數
+
+### 核心資料流
+
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         OpenCode 資料流                                  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  📁 Config Layer                                                        │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  opencode.json → Config.load() → 全域設定                        │   │
+│  │  • providers: 模型設定                                           │   │
+│  │  • mcp: 外部工具服務                                             │   │
+│  │  • permissions: 預設權限                                         │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│       │                                                                 │
+│       ▼                                                                 │
+│  💾 Storage Layer                                                       │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  SQLite Database (~/.opencode/data.db)                          │   │
+│  │  • sessions: 對話 session 記錄                                   │   │
+│  │  • messages: 完整對話歷史                                        │   │
+│  │  • permissions: 用戶授權的權限快取                               │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│       │                                                                 │
+│       ▼                                                                 │
+│  🔄 Session Layer                                                       │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  Session.create() → SessionPrompt.loop() → SessionProcessor     │   │
+│  │       │                    │                      │              │   │
+│  │       │                    ▼                      │              │   │
+│  │       │             LLM.stream()                  │              │   │
+│  │       │                    │                      │              │   │
+│  │       └────────────────────┴──────────────────────┘              │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│       │                                                                 │
+│       ▼                                                                 │
+│  🔧 Tool Layer                                                          │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  ToolRegistry.get() → Tool.execute() → PermissionNext.check()   │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -140,13 +265,145 @@ async function getLanguage(providerID: string, modelID: string) {
 }
 ```
 
+### Message 轉換層 (`transform.ts`)
+
+不同 Provider 對訊息格式有不同要求，`transform.ts` 負責統一處理：
+
+```typescript
+// packages/opencode/src/provider/transform.ts
+export namespace ProviderTransform {
+  
+  // 轉換訊息格式
+  export function message(
+    messages: CoreMessage[],
+    providerID: string
+  ): CoreMessage[] {
+    return messages.map(msg => {
+      // 1. 處理多模態內容 (圖片、檔案)
+      if (Array.isArray(msg.content)) {
+        msg.content = normalizeContent(msg.content, providerID)
+      }
+      
+      // 2. 應用 Provider 特定的快取策略
+      if (providerID.includes("anthropic") || providerID.includes("bedrock")) {
+        msg = applyCaching(msg)
+      }
+      
+      return msg
+    })
+  }
+  
+  // Anthropic 的 Cache Control (省錢神器)
+  function applyCaching(msg: CoreMessage): CoreMessage {
+    // Anthropic 支援 prompt caching，可以大幅降低重複內容的成本
+    // 對於 system prompt 和工具定義，加上 cache_control
+    if (msg.role === "system" || isToolDefinition(msg)) {
+      return {
+        ...msg,
+        experimental_providerMetadata: {
+          anthropic: {
+            cacheControl: { type: "ephemeral" }
+          }
+        }
+      }
+    }
+    return msg
+  }
+}
+```
+
+### Provider 特定選項 (`providerOptions`)
+
+```typescript
+// 不同 Provider 的特殊設定
+export function getProviderOptions(providerID: string, config: ModelConfig) {
+  const options: Record<string, any> = {}
+  
+  // Anthropic: 支援 extended thinking
+  if (providerID.includes("anthropic")) {
+    if (config.thinking) {
+      options.anthropic = {
+        thinking: {
+          type: "enabled",
+          budgetTokens: config.thinkingBudget ?? 10000
+        }
+      }
+    }
+  }
+  
+  // Google Gemini: 思考配置
+  if (providerID.includes("google")) {
+    if (config.thinking) {
+      options.google = {
+        thinkingConfig: {
+          thinkingBudget: config.thinkingBudget ?? 8000
+        }
+      }
+    }
+  }
+  
+  // OpenAI o1/o3: reasoning effort
+  if (providerID.includes("openai") && config.reasoningEffort) {
+    options.openai = {
+      reasoningEffort: config.reasoningEffort  // "low" | "medium" | "high"
+    }
+  }
+  
+  return options
+}
+```
+
+### 串流事件類型詳解
+
+```typescript
+// Vercel AI SDK 的 fullStream 會產生以下事件類型
+type StreamEvent = 
+  | { type: "text-delta"; textDelta: string }           // 文字片段
+  | { type: "tool-call"; toolName: string; args: any }  // 工具呼叫開始
+  | { type: "tool-result"; result: any }                // 工具執行結果
+  | { type: "reasoning-delta"; textDelta: string }      // 推理過程 (Claude)
+  | { type: "finish"; usage: TokenUsage }               // 完成
+  | { type: "error"; error: Error }                     // 錯誤
+
+// OpenCode 的處理方式
+for await (const event of stream.fullStream) {
+  switch (event.type) {
+    case "text-delta":
+      // 即時串流顯示給用戶
+      yield { type: "part", part: { type: "text", text: event.textDelta } }
+      break
+      
+    case "reasoning-delta":
+      // Claude 的思考過程 (可選擇是否顯示)
+      if (showReasoning) {
+        yield { type: "part", part: { type: "reasoning", text: event.textDelta } }
+      }
+      break
+      
+    case "tool-call":
+      // 記錄工具呼叫，準備執行
+      pendingToolCalls.push({
+        id: event.toolCallId,
+        name: event.toolName,
+        args: event.args,
+      })
+      break
+      
+    case "finish":
+      // 記錄 token 使用量
+      tokenUsage = event.usage
+      break
+  }
+}
+```
+
 ---
 
 ## Agent 架構設計
 
 ### 整體架構圖
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         USER INPUT                                   │
 │                    "幫我重構這段程式碼"                               │
@@ -187,23 +444,656 @@ async function getLanguage(providerID: string, modelID: string) {
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
+### Agent 定義的完整實現
+
+```typescript
+// packages/opencode/src/agent/agent.ts (完整版)
+import { z } from "zod"
+
+// Agent 資訊的完整 Schema
+export const AgentInfoSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  
+  // mode 決定 agent 在哪裡可用
+  mode: z.enum([
+    "primary",   // 主要 agent，用戶可直接選用
+    "subagent",  // 子代理，只能被 task tool 呼叫
+    "all",       // 兩者皆可
+  ]),
+  
+  // 權限規則集
+  permission: z.record(z.union([
+    z.enum(["allow", "deny", "ask"]),
+    z.record(z.enum(["allow", "deny", "ask"]))
+  ])),
+  
+  // 可選的模型覆寫
+  model: z.object({
+    providerID: z.string(),
+    modelID: z.string(),
+  }).optional(),
+  
+  // 系統提示詞
+  prompt: z.string().optional(),
+  
+  // LLM 參數
+  temperature: z.number().min(0).max(2).optional(),
+  maxTokens: z.number().optional(),
+  
+  // 執行限制
+  steps: z.number().optional(),  // 最大工具呼叫次數
+  timeout: z.number().optional(), // 超時時間 (ms)
+})
+
+export type AgentInfo = z.infer<typeof AgentInfoSchema>
+```
+
+### 內建 Agent 詳細設定
+
+```typescript
+// packages/opencode/src/agent/agent.ts
+
+export namespace Agent {
+  // 內建 agents 定義
+  const BUILTIN_AGENTS: Record<string, AgentInfo> = {
+    
+    // 🔨 Build Agent - 主要編碼執行者
+    build: {
+      name: "build",
+      description: "主要編碼 agent，具備完整的檔案操作和命令執行能力",
+      mode: "primary",
+      permission: {
+        "*": "ask",  // 預設詢問
+        read: "allow",
+        grep: "allow",
+        glob: "allow",
+      },
+      prompt: `
+你是一個專業的程式設計師。你的任務是幫助用戶編寫、修改和除錯程式碼。
+
+工作原則：
+1. 在修改檔案前，先閱讀相關程式碼了解上下文
+2. 使用 grep 和 glob 搜尋相關檔案
+3. 小步驟修改，每次只改動必要的部分
+4. 修改後執行測試確認功能正常
+5. 遇到複雜問題時，使用 task 派遣子代理深入研究
+      `,
+      temperature: 0,  // 編碼任務使用低溫度
+    },
+    
+    // 📋 Plan Agent - 只讀規劃模式
+    plan: {
+      name: "plan",
+      description: "規劃模式，只能讀取和分析，不能修改檔案",
+      mode: "primary",
+      permission: {
+        "*": "deny",       // 預設拒絕
+        read: "allow",
+        grep: "allow",
+        glob: "allow",
+        codesearch: "allow",
+        edit: {
+          "*": "deny",
+          ".opencode/plans/*.md": "allow",  // 只能編輯計畫檔
+        },
+        write: {
+          "*": "deny",
+          ".opencode/plans/*.md": "allow",
+        },
+      },
+      prompt: `
+你是一個技術規劃師。你的任務是分析程式碼並提出改進方案。
+
+工作原則：
+1. 深入理解現有程式碼結構
+2. 識別問題和改進機會
+3. 將計畫寫入 .opencode/plans/ 目錄
+4. 不要直接修改程式碼，只提供建議
+      `,
+    },
+    
+    // 🔬 General Agent - 複雜任務研究
+    general: {
+      name: "general",
+      description: "通用子代理，適合需要深入研究的複雜任務",
+      mode: "subagent",
+      permission: {
+        "*": "ask",
+        read: "allow",
+        grep: "allow",
+        glob: "allow",
+        bash: "ask",
+        edit: "ask",
+        write: "ask",
+        todoread: "deny",   // 子代理不能存取主 TODO
+        todowrite: "deny",
+      },
+      steps: 20,  // 限制執行步數
+      prompt: `
+你是一個研究助手。你的任務是深入調查特定問題並回報發現。
+
+工作原則：
+1. 專注於指派的任務
+2. 完整收集所需資訊
+3. 清晰整理發現結果
+4. 不要偏離主題
+      `,
+    },
+    
+    // 🔍 Explore Agent - Codebase 探索
+    explore: {
+      name: "explore",
+      description: "探索子代理，只有讀取權限，適合快速了解程式碼",
+      mode: "subagent",
+      permission: {
+        "*": "deny",       // 極度限制
+        read: "allow",
+        grep: "allow",
+        glob: "allow",
+        codesearch: "allow",
+      },
+      steps: 10,
+      prompt: `
+你是一個程式碼探索器。你的任務是快速理解程式碼結構。
+
+工作原則：
+1. 使用 glob 了解目錄結構
+2. 使用 grep 搜尋關鍵字
+3. 閱讀重要檔案
+4. 整理成清晰的摘要
+      `,
+    },
+    
+    // 🗜️ Compaction Agent - Token 壓縮 (隱藏)
+    compaction: {
+      name: "compaction",
+      description: "內部使用，壓縮對話歷史",
+      mode: "all",  // 但實際上是隱藏的
+      permission: {
+        "*": "deny",  // 不需要任何工具
+      },
+      prompt: `
+你的任務是摘要對話內容。保留：
+1. 用戶的主要目標和需求
+2. 已完成的重要操作
+3. 當前進度和待辦事項
+4. 重要的檔案路徑和程式碼片段
+5. 任何錯誤或問題的上下文
+
+輸出格式要清晰、結構化，方便後續對話使用。
+      `,
+      temperature: 0,
+    },
+    
+    // 📝 Title Agent - 產生對話標題 (隱藏)
+    title: {
+      name: "title",
+      description: "內部使用，產生對話標題",
+      mode: "all",
+      permission: { "*": "deny" },
+      maxTokens: 50,
+      prompt: "根據對話內容產生一個簡短的標題（5-10個字）",
+    },
+  }
+  
+  // 取得 agent
+  export function get(name: string): AgentInfo {
+    const agent = BUILTIN_AGENTS[name]
+    if (!agent) throw new Error(`Agent "${name}" not found`)
+    return agent
+  }
+  
+  // 列出可用 agents
+  export function list(mode?: "primary" | "subagent"): AgentInfo[] {
+    return Object.values(BUILTIN_AGENTS).filter(a => {
+      if (a.name === "compaction" || a.name === "title") return false
+      if (!mode) return true
+      return a.mode === mode || a.mode === "all"
+    })
+  }
+}
+```
+
 ---
 
 ## 核心元件分析
 
-### 1. Agent 定義 (`agent.ts`)
+### 1. Session 管理 (`session/`)
+
+Session 是 OpenCode 的核心概念，代表一次完整的對話互動。
 
 ```typescript
-// Agent 資訊結構
-interface AgentInfo {
-  name: string;              // 代理名稱
-  description?: string;      // 用途說明
-  mode: "subagent" | "primary" | "all";
-  permission: PermissionRuleset;
-  model?: { providerID, modelID };
-  prompt?: string;           // 系統提示詞
-  temperature?: number;
-  steps?: number;            // 最大執行步數
+// packages/opencode/src/session/session.ts
+export namespace Session {
+  // Session 資料結構
+  export interface SessionData {
+    id: string;                    // UUID
+    title?: string;                // 自動產生的標題
+    agent: string;                 // 使用的 agent 名稱
+    parentID?: string;             // 父 session ID (子代理用)
+    createdAt: Date;
+    updatedAt: Date;
+    status: "active" | "completed" | "error";
+    metadata: {
+      totalTokens: number;         // 累計 token 使用量
+      totalCost: number;           // 累計費用
+      toolCalls: number;           // 工具呼叫次數
+    };
+  }
+  
+  // 建立新 session
+  export async function create(input: {
+    agent?: string;
+    parent?: string;
+  }): Promise<SessionData> {
+    const session: SessionData = {
+      id: crypto.randomUUID(),
+      agent: input.agent ?? "build",
+      parentID: input.parent,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      status: "active",
+      metadata: { totalTokens: 0, totalCost: 0, toolCalls: 0 },
+    }
+    
+    // 儲存到 SQLite
+    await Storage.sessions.insert(session)
+    return session
+  }
+  
+  // 取得 session
+  export async function get(id: string): Promise<SessionData | null> {
+    return Storage.sessions.findOne({ id })
+  }
+  
+  // 列出所有 sessions
+  export async function list(options?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<SessionData[]> {
+    return Storage.sessions.find({
+      orderBy: { updatedAt: "desc" },
+      limit: options?.limit ?? 50,
+      offset: options?.offset ?? 0,
+    })
+  }
+}
+```
+
+### 2. Message 儲存 (`session/message.ts`)
+
+```typescript
+// packages/opencode/src/session/message.ts
+export namespace Message {
+  // 訊息類型 (符合 Vercel AI SDK)
+  export type MessageRole = "user" | "assistant" | "tool" | "system"
+  
+  export interface MessageData {
+    id: string;
+    sessionID: string;
+    role: MessageRole;
+    content: string | ContentPart[];  // 支援多模態
+    toolCalls?: ToolCall[];           // assistant 的工具呼叫
+    toolCallId?: string;              // tool 訊息對應的呼叫 ID
+    createdAt: Date;
+    metadata?: {
+      model?: string;
+      tokens?: { input: number; output: number };
+      duration?: number;
+    };
+  }
+  
+  // 新增訊息
+  export async function create(input: {
+    sessionID: string;
+    role: MessageRole;
+    content: string | ContentPart[];
+    toolCalls?: ToolCall[];
+    toolCallId?: string;
+  }): Promise<MessageData> {
+    const message: MessageData = {
+      id: crypto.randomUUID(),
+      ...input,
+      createdAt: new Date(),
+    }
+    await Storage.messages.insert(message)
+    return message
+  }
+  
+  // 取得 session 的所有訊息
+  export async function list(input: {
+    sessionID: string;
+  }): Promise<MessageData[]> {
+    return Storage.messages.find({
+      where: { sessionID: input.sessionID },
+      orderBy: { createdAt: "asc" },
+    })
+  }
+  
+  // 轉換成 AI SDK 格式
+  export function toAIMessages(messages: MessageData[]): CoreMessage[] {
+    return messages.map(msg => ({
+      role: msg.role,
+      content: msg.content,
+      ...(msg.toolCalls && { toolCalls: msg.toolCalls }),
+      ...(msg.toolCallId && { toolCallId: msg.toolCallId }),
+    }))
+  }
+}
+```
+
+### 3. Session Loop 完整實現 (`session/prompt.ts`)
+
+這是 OpenCode 的心臟，控制整個 Agent 執行流程：
+
+```typescript
+// packages/opencode/src/session/prompt.ts (完整版)
+export namespace SessionPrompt {
+  
+  export interface LoopInput {
+    sessionID: string;
+    signal?: AbortSignal;      // 取消信號
+    maxSteps?: number;         // 最大步數限制
+  }
+  
+  export interface LoopOutput {
+    type: "part" | "complete" | "error" | "permission";
+    part?: StreamPart;
+    error?: Error;
+    permission?: PermissionRequest;
+  }
+  
+  // 🔑 主要執行 Loop
+  export async function* loop(input: LoopInput): AsyncGenerator<LoopOutput> {
+    const { sessionID, signal, maxSteps = 50 } = input
+    
+    let stepCount = 0
+    let shouldContinue = true
+    
+    while (shouldContinue && stepCount < maxSteps) {
+      // 檢查取消信號
+      if (signal?.aborted) {
+        yield { type: "error", error: new Error("Aborted") }
+        return
+      }
+      
+      stepCount++
+      
+      // ═══════════════════════════════════════════════════════════
+      // Step 1: 載入對話歷史和設定
+      // ═══════════════════════════════════════════════════════════
+      const session = await Session.get(sessionID)
+      if (!session) throw new Error("Session not found")
+      
+      const messages = await Message.list({ sessionID })
+      const agent = Agent.get(session.agent)
+      
+      // ═══════════════════════════════════════════════════════════
+      // Step 2: 檢查是否需要 Compaction
+      // ═══════════════════════════════════════════════════════════
+      const model = await Provider.getModelInfo(session.agent)
+      if (SessionCompaction.isOverflow({ messages, model })) {
+        yield { type: "part", part: { type: "status", status: "compacting" } }
+        
+        const compactedMessages = await SessionCompaction.compact({
+          sessionID,
+          messages,
+        })
+        
+        // 更新資料庫中的訊息
+        await Message.replaceAll(sessionID, compactedMessages)
+        messages.length = 0
+        messages.push(...compactedMessages)
+      }
+      
+      // ═══════════════════════════════════════════════════════════
+      // Step 3: 準備工具
+      // ═══════════════════════════════════════════════════════════
+      const tools = await resolveTools(agent, sessionID)
+      const aiTools = ToolRegistry.toAITools(Object.keys(tools))
+      
+      // ═══════════════════════════════════════════════════════════
+      // Step 4: 建構 System Prompt
+      // ═══════════════════════════════════════════════════════════
+      const systemPrompt = await System.build({
+        agent,
+        cwd: process.cwd(),
+        env: process.env,
+      })
+      
+      // ═══════════════════════════════════════════════════════════
+      // Step 5: 呼叫 LLM
+      // ═══════════════════════════════════════════════════════════
+      const llmStream = LLM.stream({
+        model: await Provider.getLanguage(agent.model),
+        messages: Message.toAIMessages(messages),
+        tools: aiTools,
+        system: systemPrompt,
+        providerOptions: Provider.getOptions(agent),
+      })
+      
+      // ═══════════════════════════════════════════════════════════
+      // Step 6: 處理 LLM 回應
+      // ═══════════════════════════════════════════════════════════
+      const pendingToolCalls: ToolCall[] = []
+      let assistantContent = ""
+      
+      for await (const event of llmStream) {
+        switch (event.type) {
+          case "text-delta":
+            assistantContent += event.textDelta
+            yield { type: "part", part: { type: "text", text: event.textDelta } }
+            break
+            
+          case "reasoning-delta":
+            yield { type: "part", part: { type: "reasoning", text: event.textDelta } }
+            break
+            
+          case "tool-call":
+            pendingToolCalls.push({
+              id: event.toolCallId,
+              name: event.toolName,
+              args: event.args,
+            })
+            yield { 
+              type: "part", 
+              part: { type: "tool-call", name: event.toolName, args: event.args }
+            }
+            break
+        }
+      }
+      
+      // 儲存 assistant 訊息
+      if (assistantContent || pendingToolCalls.length > 0) {
+        await Message.create({
+          sessionID,
+          role: "assistant",
+          content: assistantContent,
+          toolCalls: pendingToolCalls,
+        })
+      }
+      
+      // ═══════════════════════════════════════════════════════════
+      // Step 7: 執行工具呼叫
+      // ═══════════════════════════════════════════════════════════
+      if (pendingToolCalls.length === 0) {
+        // 沒有工具呼叫，對話結束
+        shouldContinue = false
+        yield { type: "complete" }
+        break
+      }
+      
+      for (const toolCall of pendingToolCalls) {
+        // Doom Loop 檢測
+        if (SessionProcessor.detectDoomLoop(sessionID, toolCall)) {
+          yield {
+            type: "permission",
+            permission: {
+              type: "doom-loop",
+              tool: toolCall.name,
+              message: "偵測到可能的無限迴圈，是否繼續？",
+            }
+          }
+          // 等待用戶確認...
+        }
+        
+        // 取得工具
+        const tool = tools[toolCall.name]
+        if (!tool) {
+          await Message.create({
+            sessionID,
+            role: "tool",
+            content: `Error: Tool "${toolCall.name}" not found`,
+            toolCallId: toolCall.id,
+          })
+          continue
+        }
+        
+        // 權限檢查
+        const permission = await PermissionNext.check({
+          tool: toolCall.name,
+          patterns: extractPatterns(toolCall.args),
+          ruleset: agent.permission,
+          sessionID,
+        })
+        
+        if (permission === "deny") {
+          await Message.create({
+            sessionID,
+            role: "tool",
+            content: `Permission denied for ${toolCall.name}`,
+            toolCallId: toolCall.id,
+          })
+          continue
+        }
+        
+        if (permission === "ask") {
+          yield {
+            type: "permission",
+            permission: {
+              type: "tool",
+              tool: toolCall.name,
+              patterns: extractPatterns(toolCall.args),
+            }
+          }
+          // 等待用戶回應...
+        }
+        
+        // 執行工具
+        try {
+          yield { type: "part", part: { type: "tool-start", name: toolCall.name } }
+          
+          const result = await tool.execute(toolCall.args, {
+            sessionID,
+            messageID: "", // 會在執行時設定
+            agent: agent.name,
+            abort: signal ?? new AbortController().signal,
+            callID: toolCall.id,
+            metadata: (update) => {
+              yield { type: "part", part: { type: "tool-update", ...update } }
+            },
+            ask: async (req) => {
+              // 工具內部的權限請求
+            },
+          })
+          
+          // 儲存工具結果
+          await Message.create({
+            sessionID,
+            role: "tool",
+            content: result.output,
+            toolCallId: toolCall.id,
+          })
+          
+          yield { 
+            type: "part", 
+            part: { type: "tool-result", name: toolCall.name, result } 
+          }
+          
+        } catch (error) {
+          await Message.create({
+            sessionID,
+            role: "tool",
+            content: `Error: ${error.message}`,
+            toolCallId: toolCall.id,
+          })
+          
+          yield { 
+            type: "part", 
+            part: { type: "tool-error", name: toolCall.name, error } 
+          }
+        }
+      }
+      
+      // 繼續下一輪 Loop
+    }
+    
+    // 達到最大步數
+    if (stepCount >= maxSteps) {
+      yield { 
+        type: "error", 
+        error: new Error(`Reached maximum steps limit (${maxSteps})`) 
+      }
+    }
+  }
+}
+```
+
+### 4. System Prompt 組合 (`session/system.ts`)
+
+```typescript
+// packages/opencode/src/session/system.ts
+export namespace System {
+  
+  export async function build(input: {
+    agent: AgentInfo;
+    cwd: string;
+    env: NodeJS.ProcessEnv;
+  }): Promise<string> {
+    const { agent, cwd, env } = input
+    
+    const parts: string[] = []
+    
+    // 基本身份
+    parts.push(`You are OpenCode, an AI coding assistant.`)
+    
+    // 環境資訊
+    parts.push(`
+## Environment
+- Working Directory: ${cwd}
+- Operating System: ${process.platform}
+- Shell: ${env.SHELL ?? "unknown"}
+- Node Version: ${process.version}
+- Current Time: ${new Date().toISOString()}
+`)
+    
+    // Agent 特定指示
+    if (agent.prompt) {
+      parts.push(`## Instructions\n${agent.prompt}`)
+    }
+    
+    // 工具使用指南
+    parts.push(`
+## Tool Usage Guidelines
+1. Always read files before modifying them
+2. Use grep to search for patterns across files
+3. Use glob to discover file structure
+4. Make small, focused changes
+5. Run tests after modifications
+6. Use task to delegate complex subtasks
+`)
+    
+    // 安全提醒
+    parts.push(`
+## Safety Guidelines
+- Never execute destructive commands without user confirmation
+- Be careful with rm, sudo, and other dangerous operations
+- Always verify file paths before writing
+`)
+    
+    return parts.join("\n\n")
+  }
 }
 ```
 
@@ -217,45 +1107,6 @@ interface AgentInfo {
 | `explore` | subagent | Codebase 探索 | 只有讀取工具 |
 | `compaction` | hidden | Token 壓縮 | 全部禁止 |
 | `title` | hidden | 產生標題 | 全部禁止 |
-
-### 2. Session Loop (`prompt.ts`)
-
-```
-┌──────────────────────────────────────────────────────┐
-│                    MAIN LOOP                          │
-│  ┌─────────────────────────────────────────────────┐ │
-│  │  while (true) {                                 │ │
-│  │    1. 取得最後 user message                     │ │
-│  │    2. 檢查是否需要 compaction                   │ │
-│  │    3. 選擇 agent + 準備 tools                   │ │
-│  │    4. 呼叫 LLM (streamText)                     │ │
-│  │    5. 處理 tool calls                          │ │
-│  │    6. 決定: continue / stop / compact          │ │
-│  │  }                                             │ │
-│  └─────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────┘
-```
-
-### 3. Tool 系統 (`tool.ts`)
-
-```typescript
-Tool.define("read", {
-  description: "讀取檔案內容",
-  parameters: z.object({
-    filePath: z.string(),
-    offset: z.number().optional(),
-    limit: z.number().optional(),
-  }),
-  execute: async (args, ctx) => {
-    // 1. 權限檢查
-    await ctx.ask({ permission: "read", patterns: [args.filePath] });
-    // 2. 執行操作
-    const content = await Bun.file(args.filePath).text();
-    // 3. 回傳結果
-    return { title: "Read file", output: content, metadata: {} };
-  }
-});
-```
 
 ---
 
