@@ -1567,6 +1567,381 @@ export namespace ToolRegistry {
 }
 ```
 
+### 完整內建工具清單
+
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        OpenCode 完整工具清單                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  📁 檔案操作工具                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ read      │ 讀取檔案內容，支援分段讀取 (offset/limit)            │   │
+│  │ write     │ 建立新檔案或完全覆寫現有檔案                         │   │
+│  │ edit      │ 精確替換檔案中的特定內容 (oldString → newString)     │   │
+│  │ multiedit │ 批次編輯，一次替換多處內容                           │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  🔍 搜尋工具                                                             │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ grep       │ 文字/正則搜尋，支援多檔案搜尋                       │   │
+│  │ glob       │ 列出符合 pattern 的檔案 (如 **/*.ts)                │   │
+│  │ codesearch │ 語意化程式碼搜尋，找到相關的類別/函數              │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  🖥️ 系統工具                                                            │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ bash      │ 執行 shell 命令，支援 timeout 和 cwd                 │   │
+│  │ lsp       │ 呼叫 Language Server Protocol 取得型別資訊           │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  🤖 Agent 工具                                                          │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ task      │ 派遣子代理執行特定任務                               │   │
+│  │ skill     │ 載入預定義的技能腳本                                │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  🌐 網路工具                                                             │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ websearch │ 網頁搜尋 (需要設定 API key)                          │   │
+│  │ webfetch  │ 抓取網頁內容並轉換成 Markdown                        │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+│  📋 其他工具                                                             │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │ question  │ 向用戶提問並等待回應                                 │   │
+│  │ todoread  │ 讀取專案的 TODO 列表                                 │   │
+│  │ todowrite │ 更新專案的 TODO 列表                                 │   │
+│  │ memory    │ 讀寫長期記憶 (跨 session 保存)                       │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 更多工具實作範例
+
+#### 5. Grep Tool (文字搜尋)
+
+```typescript
+// packages/opencode/src/tool/grep.ts
+Tool.define("grep", {
+  description: `
+    在檔案中搜尋文字或正則表達式。
+    可以搜尋單一檔案或整個目錄。
+    返回匹配的行和上下文。
+  `,
+  parameters: z.object({
+    pattern: z.string().describe("搜尋模式 (文字或正則)"),
+    path: z.string().describe("檔案或目錄路徑"),
+    isRegex: z.boolean().optional().default(false),
+    caseSensitive: z.boolean().optional().default(true),
+    context: z.number().optional().default(2).describe("顯示匹配行前後的行數"),
+    maxResults: z.number().optional().default(50),
+  }),
+  async execute(args, ctx) {
+    const { pattern, path, isRegex, caseSensitive, context, maxResults } = args
+    
+    // 建立正則表達式
+    const flags = caseSensitive ? "g" : "gi"
+    const regex = isRegex ? new RegExp(pattern, flags) : new RegExp(escapeRegex(pattern), flags)
+    
+    // 收集所有要搜尋的檔案
+    const files = await collectFiles(path)
+    const results: SearchResult[] = []
+    
+    for (const file of files) {
+      const content = await Bun.file(file).text()
+      const lines = content.split("\n")
+      
+      for (let i = 0; i < lines.length; i++) {
+        if (regex.test(lines[i])) {
+          // 取得上下文行
+          const startLine = Math.max(0, i - context)
+          const endLine = Math.min(lines.length - 1, i + context)
+          
+          results.push({
+            file,
+            line: i + 1,
+            content: lines[i],
+            context: lines.slice(startLine, endLine + 1).join("\n"),
+          })
+          
+          if (results.length >= maxResults) break
+        }
+      }
+      
+      if (results.length >= maxResults) break
+    }
+    
+    // 格式化輸出
+    const output = results.map(r => 
+      `${r.file}:${r.line}\n${r.context}\n`
+    ).join("\n---\n")
+    
+    return {
+      title: `Grep: ${pattern}`,
+      output: output || "No matches found",
+      metadata: { matches: results.length, pattern }
+    }
+  }
+})
+```
+
+#### 6. Glob Tool (檔案列表)
+
+```typescript
+// packages/opencode/src/tool/glob.ts
+import { Glob } from "bun"
+
+Tool.define("glob", {
+  description: `
+    列出符合 pattern 的檔案。
+    使用標準 glob 語法：
+    - * 匹配任意字元
+    - ** 匹配任意層級目錄
+    - ? 匹配單一字元
+    - [abc] 匹配括號內的字元
+  `,
+  parameters: z.object({
+    pattern: z.string().describe("Glob pattern (如 **/*.ts)"),
+    cwd: z.string().optional().describe("起始目錄"),
+    ignore: z.array(z.string()).optional().describe("要忽略的 patterns"),
+  }),
+  async execute(args, ctx) {
+    const { pattern, cwd = process.cwd(), ignore = [] } = args
+    
+    // 預設忽略
+    const defaultIgnore = [
+      "node_modules/**",
+      ".git/**",
+      "dist/**",
+      "build/**",
+      "*.min.js",
+    ]
+    
+    const allIgnore = [...defaultIgnore, ...ignore]
+    
+    // 使用 Bun 的 Glob
+    const glob = new Glob(pattern)
+    const files: string[] = []
+    
+    for await (const file of glob.scan({ cwd, absolute: true })) {
+      // 檢查是否應該忽略
+      const shouldIgnore = allIgnore.some(ig => {
+        const ignoreGlob = new Glob(ig)
+        return ignoreGlob.match(file)
+      })
+      
+      if (!shouldIgnore) {
+        files.push(file)
+      }
+    }
+    
+    // 排序並格式化
+    files.sort()
+    
+    // 生成樹狀結構
+    const tree = buildFileTree(files, cwd)
+    
+    return {
+      title: `Glob: ${pattern}`,
+      output: tree,
+      metadata: { count: files.length, pattern }
+    }
+  }
+})
+
+// 輔助函數：生成檔案樹
+function buildFileTree(files: string[], root: string): string {
+  const lines: string[] = []
+  const dirs = new Map<string, string[]>()
+  
+  for (const file of files) {
+    const relative = file.replace(root + "/", "")
+    const parts = relative.split("/")
+    const dir = parts.slice(0, -1).join("/") || "."
+    const name = parts[parts.length - 1]
+    
+    if (!dirs.has(dir)) dirs.set(dir, [])
+    dirs.get(dir)!.push(name)
+  }
+  
+  for (const [dir, files] of [...dirs].sort()) {
+    lines.push(`📁 ${dir}/`)
+    for (const file of files.sort()) {
+      lines.push(`   └── ${file}`)
+    }
+  }
+  
+  return lines.join("\n")
+}
+```
+
+#### 7. Write Tool (寫入檔案)
+
+```typescript
+// packages/opencode/src/tool/write.ts
+Tool.define("write", {
+  description: `
+    建立新檔案或完全覆寫現有檔案。
+    如果目錄不存在會自動建立。
+    注意：這會完全覆寫檔案，如果只想修改部分內容請使用 edit。
+  `,
+  parameters: z.object({
+    filePath: z.string().describe("檔案路徑"),
+    content: z.string().describe("檔案內容"),
+  }),
+  async execute(args, ctx) {
+    const { filePath, content } = args
+    
+    // 請求權限
+    await ctx.ask({ permission: "write", patterns: [filePath] })
+    
+    // 檢查檔案是否已存在
+    const exists = await Bun.file(filePath).exists()
+    
+    // 確保目錄存在
+    const dir = path.dirname(filePath)
+    await fs.promises.mkdir(dir, { recursive: true })
+    
+    // 寫入檔案
+    await Bun.write(filePath, content)
+    
+    // 統計資訊
+    const lines = content.split("\n").length
+    const bytes = Buffer.byteLength(content, "utf8")
+    
+    return {
+      title: exists ? `Overwrite ${filePath}` : `Create ${filePath}`,
+      output: `${exists ? "Overwrote" : "Created"} ${filePath}\n` +
+              `Lines: ${lines}, Bytes: ${bytes}`,
+      metadata: { path: filePath, lines, bytes, created: !exists }
+    }
+  }
+})
+```
+
+#### 8. MultiEdit Tool (批次編輯)
+
+```typescript
+// packages/opencode/src/tool/multiedit.ts
+Tool.define("multiedit", {
+  description: `
+    批次編輯檔案，一次執行多個替換操作。
+    每個替換都必須精確匹配。
+    適合需要在多處進行相關修改的情況。
+  `,
+  parameters: z.object({
+    filePath: z.string().describe("檔案路徑"),
+    edits: z.array(z.object({
+      oldString: z.string(),
+      newString: z.string(),
+    })).describe("替換操作列表"),
+  }),
+  async execute(args, ctx) {
+    const { filePath, edits } = args
+    
+    await ctx.ask({ permission: "edit", patterns: [filePath] })
+    
+    let content = await Bun.file(filePath).text()
+    const results: { success: boolean; old: string; error?: string }[] = []
+    
+    for (const edit of edits) {
+      const matches = content.split(edit.oldString).length - 1
+      
+      if (matches === 0) {
+        results.push({ 
+          success: false, 
+          old: edit.oldString.slice(0, 50),
+          error: "Not found" 
+        })
+        continue
+      }
+      
+      if (matches > 1) {
+        results.push({ 
+          success: false, 
+          old: edit.oldString.slice(0, 50),
+          error: `Multiple matches (${matches})` 
+        })
+        continue
+      }
+      
+      content = content.replace(edit.oldString, edit.newString)
+      results.push({ success: true, old: edit.oldString.slice(0, 50) })
+    }
+    
+    // 只有全部成功才寫入
+    const allSuccess = results.every(r => r.success)
+    if (allSuccess) {
+      await Bun.write(filePath, content)
+    }
+    
+    // 輸出結果
+    const output = results.map((r, i) => 
+      `${i + 1}. ${r.success ? "✅" : "❌"} ${r.old}... ${r.error ?? ""}`
+    ).join("\n")
+    
+    return {
+      title: `MultiEdit ${filePath}`,
+      output: allSuccess 
+        ? `Successfully applied ${edits.length} edits\n${output}`
+        : `Failed - no changes made\n${output}`,
+      metadata: { 
+        success: allSuccess, 
+        total: edits.length,
+        successful: results.filter(r => r.success).length 
+      }
+    }
+  }
+})
+```
+
+### Tool Context 完整介面
+
+```typescript
+// packages/opencode/src/tool/tool.ts
+interface ToolContext {
+  // 識別資訊
+  sessionID: string;           // 所屬 session
+  messageID: string;           // 所屬訊息
+  agent: string;               // 執行的 agent
+  callID?: string;             // 工具呼叫 ID
+  
+  // 控制
+  abort: AbortSignal;          // 取消信號
+  
+  // 更新執行狀態 (即時回報給前端)
+  metadata(input: {
+    title?: string;            // 更新標題
+    status?: string;           // 狀態描述
+    progress?: number;         // 進度 (0-100)
+    metadata?: any;            // 額外資訊
+  }): void;
+  
+  // 請求權限
+  ask(input: {
+    permission: string;        // 權限類型
+    patterns: string[];        // 相關 patterns (檔案路徑等)
+    message?: string;          // 給用戶的說明
+  }): Promise<void>;
+  
+  // 讀取設定
+  config<T>(key: string): T | undefined;
+  
+  // 發送事件給前端
+  emit(event: ToolEvent): void;
+}
+
+// 工具事件類型
+type ToolEvent = 
+  | { type: "progress"; value: number }
+  | { type: "log"; message: string }
+  | { type: "file-change"; path: string; action: "create" | "modify" | "delete" }
+  | { type: "command-output"; stdout: string; stderr: string }
+```
+```
+
 ---
 
 ## 權限系統
