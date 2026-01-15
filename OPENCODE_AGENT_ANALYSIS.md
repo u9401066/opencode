@@ -6169,24 +6169,60 @@ OpenCode 是學習現代 AI Agent 架構的絕佳範例：
 ## 參考資源
 
 ### 官方資源
+
 - [OpenCode GitHub](https://github.com/sst/opencode)
 - [OpenCode 文件](https://opencode.ai/docs)
 - [Vercel AI SDK](https://sdk.vercel.ai/)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 
 ### 相關閱讀
+
 - [Building AI Agents with TypeScript](https://sdk.vercel.ai/docs/ai-sdk-core)
 - [MCP Server 開發指南](https://modelcontextprotocol.io/docs/server/building)
 - [Claude Function Calling](https://docs.anthropic.com/claude/docs/function-calling)
 
 ### 社群
+
 - [OpenCode Discord](https://discord.gg/opencode)
 - [SST Discord](https://discord.gg/sst)
 
 ---
 
-**本分析由 u9401066 於 2026-01-15 完成**
+## 📊 文件統計
 
-文件版本: v2.0 (深度擴充版)
-總行數: 2500+ 行
-涵蓋主題: 專案結構、Vercel AI SDK、Agent 系統、Session Loop、工具系統、權限控制、MCP 整合、Token 管理
+```text
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              📈 文件統計資訊                                     │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  📝 文件版本: v3.0 (完整版)                                                     │
+│  📅 最後更新: 2026-01-15                                                        │
+│  ✍️ 作者: u9401066                                                              │
+│                                                                                 │
+│  📊 統計:                                                                       │
+│  ├── 總行數: 6200+ 行                                                           │
+│  ├── 章節數: 17 個主章節                                                        │
+│  ├── 程式碼區塊: 80+ 個                                                         │
+│  ├── 圖表: 15+ 個                                                               │
+│  └── 表格: 10+ 個                                                               │
+│                                                                                 │
+│  📚 涵蓋主題:                                                                   │
+│  ├── 專案結構 (120+ 檔案分析)                                                   │
+│  ├── Vercel AI SDK (20+ Provider)                                               │
+│  ├── Agent 系統 (5 內建 Agent)                                                  │
+│  ├── Session Loop (完整狀態機)                                                  │
+│  ├── 工具系統 (15+ 工具)                                                        │
+│  ├── 權限控制 (Doom Loop 防護)                                                  │
+│  ├── MCP 整合 (Local/Remote)                                                    │
+│  ├── Token 管理 (三層壓縮)                                                      │
+│  ├── 進階功能 (Snapshot, Todo, Skill)                                           │
+│  └── 基礎設施 (Bus, LSP, Storage)                                               │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+**🔗 Fork 連結**: [u9401066/opencode](https://github.com/u9401066/opencode)
+
+**本分析由 u9401066 於 2026-01-15 完成**
