@@ -168,6 +168,9 @@
 - [6.3 工具實作範例](#工具實作範例)
 - [6.4 Tool Context 完整介面](#tool-context-完整介面)
 - [6.5 並行工具執行](#並行工具執行-parallel-tool-execution)
+- [6.6 🌐 WebFetch Tool](#-webfetch-tool-網頁內容擷取)
+- [6.7 🔍 WebSearch Tool](#-websearch-tool-網頁搜尋)
+- [6.8 💻 CodeSearch Tool](#-codesearch-tool-程式碼搜尋)
 
 </details>
 
@@ -3012,6 +3015,785 @@ export namespace ToolRegistry {
 ```
 
 ### 更多工具實作範例
+
+---
+
+#### 🌐 WebFetch Tool (網頁內容擷取)
+
+**用途**：從指定 URL 抓取網頁內容，可轉換為 Markdown、純文字或 HTML 格式。
+
+```typescript
+// packages/opencode/src/tool/webfetch.ts
+import z from "zod"
+import { Tool } from "./tool"
+import TurndownService from "turndown"
+
+const MAX_RESPONSE_SIZE = 5 * 1024 * 1024  // 5MB 限制
+const DEFAULT_TIMEOUT = 30 * 1000          // 30 秒
+const MAX_TIMEOUT = 120 * 1000             // 最長 2 分鐘
+
+export const WebFetchTool = Tool.define("webfetch", {
+  description: `
+    - Fetches content from a specified URL
+    - Converts to requested format (markdown by default)
+    - Use when you need to retrieve and analyze web content
+    
+    Usage notes:
+    - The URL must be a fully-formed valid URL (http:// or https://)
+    - Format options: "markdown" (default), "text", or "html"
+    - Results may be summarized if content is very large
+  `,
+  
+  parameters: z.object({
+    url: z.string().describe("The URL to fetch content from"),
+    format: z
+      .enum(["text", "markdown", "html"])
+      .default("markdown")
+      .describe("Output format: text, markdown, or html"),
+    timeout: z.number().optional().describe("Timeout in seconds (max 120)"),
+  }),
+  
+  async execute(params, ctx) {
+    // 1️⃣ 驗證 URL
+    if (!params.url.startsWith("http://") && !params.url.startsWith("https://")) {
+      throw new Error("URL must start with http:// or https://")
+    }
+
+    // 2️⃣ 請求權限
+    await ctx.ask({
+      permission: "webfetch",
+      patterns: [params.url],
+      always: ["*"],  // 允許 "always allow all URLs" 選項
+      metadata: {
+        url: params.url,
+        format: params.format,
+        timeout: params.timeout,
+      },
+    })
+
+    // 3️⃣ 設置 timeout
+    const timeout = Math.min(
+      (params.timeout ?? DEFAULT_TIMEOUT / 1000) * 1000, 
+      MAX_TIMEOUT
+    )
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeout)
+
+    // 4️⃣ 根據請求格式設置 Accept header
+    let acceptHeader = "*/*"
+    switch (params.format) {
+      case "markdown":
+        acceptHeader = "text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, */*;q=0.1"
+        break
+      case "text":
+        acceptHeader = "text/plain;q=1.0, text/markdown;q=0.9, text/html;q=0.8, */*;q=0.1"
+        break
+      case "html":
+        acceptHeader = "text/html;q=1.0, application/xhtml+xml;q=0.9, */*;q=0.1"
+        break
+    }
+
+    // 5️⃣ 發送請求 (模擬瀏覽器 User-Agent)
+    const response = await fetch(params.url, {
+      signal: AbortSignal.any([controller.signal, ctx.abort]),
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/143.0.0.0 Safari/537.36",
+        Accept: acceptHeader,
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    })
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      throw new Error(`Request failed with status code: ${response.status}`)
+    }
+
+    // 6️⃣ 檢查 response 大小
+    const contentLength = response.headers.get("content-length")
+    if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) {
+      throw new Error("Response too large (exceeds 5MB limit)")
+    }
+
+    const arrayBuffer = await response.arrayBuffer()
+    if (arrayBuffer.byteLength > MAX_RESPONSE_SIZE) {
+      throw new Error("Response too large (exceeds 5MB limit)")
+    }
+
+    const content = new TextDecoder().decode(arrayBuffer)
+    const contentType = response.headers.get("content-type") || ""
+    const title = `${params.url} (${contentType})`
+
+    // 7️⃣ 根據格式處理內容
+    switch (params.format) {
+      case "markdown":
+        if (contentType.includes("text/html")) {
+          // HTML → Markdown 轉換
+          const markdown = convertHTMLToMarkdown(content)
+          return { output: markdown, title, metadata: {} }
+        }
+        return { output: content, title, metadata: {} }
+
+      case "text":
+        if (contentType.includes("text/html")) {
+          // 萃取純文字 (移除 script, style 等)
+          const text = await extractTextFromHTML(content)
+          return { output: text, title, metadata: {} }
+        }
+        return { output: content, title, metadata: {} }
+
+      case "html":
+        return { output: content, title, metadata: {} }
+
+      default:
+        return { output: content, title, metadata: {} }
+    }
+  },
+})
+
+// 使用 TurndownService 將 HTML 轉為 Markdown
+function convertHTMLToMarkdown(html: string): string {
+  const turndownService = new TurndownService({
+    headingStyle: "atx",        // # 標題風格
+    hr: "---",                  // 水平線
+    bulletListMarker: "-",      // 無序列表
+    codeBlockStyle: "fenced",   // ``` 程式碼區塊
+    emDelimiter: "*",           // *斜體*
+  })
+  turndownService.remove(["script", "style", "meta", "link"])
+  return turndownService.turndown(html)
+}
+
+// 使用 Bun 的 HTMLRewriter 萃取純文字
+async function extractTextFromHTML(html: string): Promise<string> {
+  let text = ""
+  let skipContent = false
+
+  const rewriter = new HTMLRewriter()
+    .on("script, style, noscript, iframe, object, embed", {
+      element() { skipContent = true },
+      text() { /* Skip */ },
+    })
+    .on("*", {
+      element(element) {
+        if (!["script", "style", "noscript", "iframe", "object", "embed"].includes(element.tagName)) {
+          skipContent = false
+        }
+      },
+      text(input) {
+        if (!skipContent) text += input.text
+      },
+    })
+    .transform(new Response(html))
+
+  await rewriter.text()
+  return text.trim()
+}
+```
+
+##### WebFetch 流程圖
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                          🌐 WebFetch Tool 執行流程                               │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│   Agent 呼叫                                                                    │
+│   webfetch({ url: "https://docs.bun.sh/", format: "markdown" })                │
+│                                                                                 │
+│   ┌─────────────────────────────────────────────────────────────────────────┐  │
+│   │ Step 1: URL 驗證                                                        │  │
+│   │ ├── ✅ https://docs.bun.sh/ → OK                                       │  │
+│   │ └── ❌ ftp://example.com → Error: Must be http/https                   │  │
+│   └─────────────────────────────────────────────────────────────────────────┘  │
+│                              │                                                  │
+│                              ▼                                                  │
+│   ┌─────────────────────────────────────────────────────────────────────────┐  │
+│   │ Step 2: 權限檢查                                                        │  │
+│   │ ├── 檢查 ruleset 中的 webfetch 權限                                    │  │
+│   │ ├── permission: "ask" → 詢問用戶                                       │  │
+│   │ │   ┌──────────────────────────────────────┐                           │  │
+│   │ │   │ 🔒 Allow webfetch to:                │                           │  │
+│   │ │   │    https://docs.bun.sh/             │                           │  │
+│   │ │   │ [Allow] [Allow All] [Deny]          │                           │  │
+│   │ │   └──────────────────────────────────────┘                           │  │
+│   │ └── permission: "allow" → 直接執行                                     │  │
+│   └─────────────────────────────────────────────────────────────────────────┘  │
+│                              │                                                  │
+│                              ▼                                                  │
+│   ┌─────────────────────────────────────────────────────────────────────────┐  │
+│   │ Step 3: HTTP Request                                                    │  │
+│   │                                                                         │  │
+│   │   fetch("https://docs.bun.sh/", {                                       │  │
+│   │     headers: {                                                          │  │
+│   │       "User-Agent": "Mozilla/5.0...",  // 模擬瀏覽器                   │  │
+│   │       "Accept": "text/markdown;q=1.0, text/html;q=0.7...",             │  │
+│   │     },                                                                  │  │
+│   │     signal: AbortSignal.any([timeout, ctx.abort])                      │  │
+│   │   })                                                                    │  │
+│   │                                                                         │  │
+│   │   ⏱️ Timeout: 30s (預設) ~ 120s (最長)                                  │  │
+│   │   📦 Max Size: 5MB                                                      │  │
+│   └─────────────────────────────────────────────────────────────────────────┘  │
+│                              │                                                  │
+│                              ▼                                                  │
+│   ┌─────────────────────────────────────────────────────────────────────────┐  │
+│   │ Step 4: 內容轉換                                                        │  │
+│   │                                                                         │  │
+│   │   format="markdown" + Content-Type="text/html"                         │  │
+│   │   ├── 使用 TurndownService 轉換                                        │  │
+│   │   ├── 移除 <script>, <style>, <meta>                                   │  │
+│   │   └── 保留結構: # 標題, - 列表, ``` 程式碼                             │  │
+│   │                                                                         │  │
+│   │   format="text" + Content-Type="text/html"                             │  │
+│   │   ├── 使用 HTMLRewriter 萃取                                           │  │
+│   │   └── 移除所有 HTML 標籤，只保留文字                                   │  │
+│   │                                                                         │  │
+│   │   format="html"                                                        │  │
+│   │   └── 直接返回原始 HTML                                                │  │
+│   └─────────────────────────────────────────────────────────────────────────┘  │
+│                              │                                                  │
+│                              ▼                                                  │
+│   ┌─────────────────────────────────────────────────────────────────────────┐  │
+│   │ Step 5: 返回結果                                                        │  │
+│   │                                                                         │  │
+│   │   return {                                                              │  │
+│   │     title: "https://docs.bun.sh/ (text/html)",                         │  │
+│   │     output: "# Bun\n\nBun is a fast JavaScript...",                    │  │
+│   │     metadata: {}                                                        │  │
+│   │   }                                                                     │  │
+│   └─────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### 🔍 WebSearch Tool (網頁搜尋)
+
+**用途**：使用 Exa AI API 進行即時網路搜尋，取得最新資訊。
+
+```typescript
+// packages/opencode/src/tool/websearch.ts
+import z from "zod"
+import { Tool } from "./tool"
+
+// Exa AI MCP 端點配置
+const API_CONFIG = {
+  BASE_URL: "https://mcp.exa.ai",
+  ENDPOINTS: { SEARCH: "/mcp" },
+  DEFAULT_NUM_RESULTS: 8,
+} as const
+
+// MCP JSON-RPC 請求格式
+interface McpSearchRequest {
+  jsonrpc: string
+  id: number
+  method: string
+  params: {
+    name: string
+    arguments: {
+      query: string
+      numResults?: number
+      livecrawl?: "fallback" | "preferred"
+      type?: "auto" | "fast" | "deep"
+      contextMaxCharacters?: number
+    }
+  }
+}
+
+// MCP JSON-RPC 回應格式
+interface McpSearchResponse {
+  jsonrpc: string
+  result: {
+    content: Array<{
+      type: string
+      text: string
+    }>
+  }
+}
+
+export const WebSearchTool = Tool.define("websearch", {
+  description: `
+    - Search the web using Exa AI - performs real-time web searches
+    - Provides up-to-date information for current events and recent data
+    - Use this tool for accessing information beyond knowledge cutoff
+    
+    Usage notes:
+    - livecrawl: 'fallback' (use cache first) or 'preferred' (prioritize live)
+    - type: 'auto' (balanced), 'fast' (quick), 'deep' (comprehensive)
+    - Configurable context length for optimal LLM integration
+  `,
+  
+  parameters: z.object({
+    query: z.string().describe("Search query"),
+    numResults: z.number().optional().describe("Number of results (default: 8)"),
+    livecrawl: z
+      .enum(["fallback", "preferred"])
+      .optional()
+      .describe("Live crawl mode"),
+    type: z
+      .enum(["auto", "fast", "deep"])
+      .optional()
+      .describe("Search type"),
+    contextMaxCharacters: z
+      .number()
+      .optional()
+      .describe("Max chars for LLM context (default: 10000)"),
+  }),
+  
+  async execute(params, ctx) {
+    // 1️⃣ 請求權限
+    await ctx.ask({
+      permission: "websearch",
+      patterns: [params.query],
+      always: ["*"],
+      metadata: {
+        query: params.query,
+        numResults: params.numResults,
+        type: params.type,
+      },
+    })
+
+    // 2️⃣ 構建 MCP 請求 (JSON-RPC 2.0 格式)
+    const searchRequest: McpSearchRequest = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: "web_search_exa",  // Exa AI 的搜尋工具名稱
+        arguments: {
+          query: params.query,
+          type: params.type || "auto",
+          numResults: params.numResults || API_CONFIG.DEFAULT_NUM_RESULTS,
+          livecrawl: params.livecrawl || "fallback",
+          contextMaxCharacters: params.contextMaxCharacters,
+        },
+      },
+    }
+
+    // 3️⃣ 發送請求到 Exa AI MCP 端點
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 25000)  // 25 秒 timeout
+
+    try {
+      const response = await fetch(
+        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}`,
+        {
+          method: "POST",
+          headers: {
+            accept: "application/json, text/event-stream",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(searchRequest),
+          signal: AbortSignal.any([controller.signal, ctx.abort]),
+        }
+      )
+
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Search error (${response.status}): ${errorText}`)
+      }
+
+      // 4️⃣ 解析 SSE (Server-Sent Events) 回應
+      const responseText = await response.text()
+      const lines = responseText.split("\n")
+      
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const data: McpSearchResponse = JSON.parse(line.substring(6))
+          if (data.result?.content?.length > 0) {
+            return {
+              output: data.result.content[0].text,
+              title: `Web search: ${params.query}`,
+              metadata: {},
+            }
+          }
+        }
+      }
+
+      // 沒找到結果
+      return {
+        output: "No search results found. Please try a different query.",
+        title: `Web search: ${params.query}`,
+        metadata: {},
+      }
+    } catch (error) {
+      clearTimeout(timeoutId)
+      
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error("Search request timed out")
+      }
+      throw error
+    }
+  },
+})
+```
+
+##### WebSearch 架構圖
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                          🔍 WebSearch Tool 架構                                  │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│   ┌───────────────────────────────────────────────────────────────────────┐    │
+│   │                           OpenCode Agent                              │    │
+│   │                                                                       │    │
+│   │  "搜尋 2024 年最新的 TypeScript 5.0 新功能"                           │    │
+│   └───────────────────────────────────────────────────────────────────────┘    │
+│                                       │                                         │
+│                                       ▼                                         │
+│   ┌───────────────────────────────────────────────────────────────────────┐    │
+│   │                        WebSearch Tool                                 │    │
+│   │                                                                       │    │
+│   │   構建 MCP JSON-RPC 請求:                                             │    │
+│   │   {                                                                   │    │
+│   │     "jsonrpc": "2.0",                                                 │    │
+│   │     "method": "tools/call",                                           │    │
+│   │     "params": {                                                       │    │
+│   │       "name": "web_search_exa",                                       │    │
+│   │       "arguments": {                                                  │    │
+│   │         "query": "TypeScript 5.0 new features 2024",                 │    │
+│   │         "type": "auto",                                               │    │
+│   │         "numResults": 8                                               │    │
+│   │       }                                                               │    │
+│   │     }                                                                 │    │
+│   │   }                                                                   │    │
+│   └───────────────────────────────────────────────────────────────────────┘    │
+│                                       │                                         │
+│                                       │ HTTPS POST                              │
+│                                       ▼                                         │
+│   ┌───────────────────────────────────────────────────────────────────────┐    │
+│   │                     https://mcp.exa.ai/mcp                            │    │
+│   │                          (Exa AI MCP Server)                          │    │
+│   │                                                                       │    │
+│   │   ┌─────────────────────────────────────────────────────────────┐    │    │
+│   │   │  🔍 Exa AI Search Engine                                    │    │    │
+│   │   │                                                             │    │    │
+│   │   │  - Neural search (語義理解)                                 │    │    │
+│   │   │  - Live crawling (即時爬取)                                 │    │    │
+│   │   │  - Content extraction (內容萃取)                            │    │    │
+│   │   │  - LLM-optimized output (針對 LLM 優化)                     │    │    │
+│   │   └─────────────────────────────────────────────────────────────┘    │    │
+│   └───────────────────────────────────────────────────────────────────────┘    │
+│                                       │                                         │
+│                                       │ SSE Response                            │
+│                                       ▼                                         │
+│   ┌───────────────────────────────────────────────────────────────────────┐    │
+│   │                         解析 SSE 回應                                 │    │
+│   │                                                                       │    │
+│   │   data: {"jsonrpc":"2.0","result":{"content":[{                      │    │
+│   │     "type":"text",                                                    │    │
+│   │     "text":"## TypeScript 5.0 New Features\n\n1. Decorators..."      │    │
+│   │   }]}}                                                                │    │
+│   │                                                                       │    │
+│   │   → 解析 JSON                                                        │    │
+│   │   → 提取 result.content[0].text                                      │    │
+│   │   → 返回給 Agent                                                     │    │
+│   └───────────────────────────────────────────────────────────────────────┘    │
+│                                                                                 │
+│   ═══════════════════════════════════════════════════════════════════════      │
+│                              搜尋類型比較                                        │
+│   ═══════════════════════════════════════════════════════════════════════      │
+│                                                                                 │
+│   type="fast"     │ 快速搜尋，使用快取優先，適合一般問題                        │
+│   type="auto"     │ 自動平衡，根據查詢自動選擇策略 (預設)                       │
+│   type="deep"     │ 深度搜尋，更全面但較慢，適合研究性問題                      │
+│                                                                                 │
+│   ═══════════════════════════════════════════════════════════════════════      │
+│                              爬取模式比較                                        │
+│   ═══════════════════════════════════════════════════════════════════════      │
+│                                                                                 │
+│   livecrawl="fallback"   │ 優先使用快取，快取不可用時即時爬取 (預設)            │
+│   livecrawl="preferred"  │ 優先即時爬取，確保資訊最新                           │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### 💻 CodeSearch Tool (程式碼搜尋)
+
+**用途**：使用 Exa AI 搜尋程式碼範例、API 文件、SDK 用法。這是程式設計任務的專用搜尋工具。
+
+```typescript
+// packages/opencode/src/tool/codesearch.ts
+import z from "zod"
+import { Tool } from "./tool"
+
+// 使用與 WebSearch 相同的 Exa AI MCP 端點
+const API_CONFIG = {
+  BASE_URL: "https://mcp.exa.ai",
+  ENDPOINTS: { CONTEXT: "/mcp" },
+} as const
+
+interface McpCodeRequest {
+  jsonrpc: string
+  id: number
+  method: string
+  params: {
+    name: string
+    arguments: {
+      query: string
+      tokensNum: number
+    }
+  }
+}
+
+interface McpCodeResponse {
+  jsonrpc: string
+  result: {
+    content: Array<{
+      type: string
+      text: string
+    }>
+  }
+}
+
+export const CodeSearchTool = Tool.define("codesearch", {
+  description: `
+    - Search and get relevant context for any programming task using Exa Code API
+    - Provides highest quality context for libraries, SDKs, and APIs
+    - Use for ANY question related to programming
+    - Returns code examples, documentation, and API references
+    
+    Usage notes:
+    - Adjustable token count (1000-50000)
+    - Default 5000 tokens for balanced context
+    - Examples: 'React useState hook', 'Python pandas filtering', 'Next.js middleware'
+  `,
+  
+  parameters: z.object({
+    query: z
+      .string()
+      .describe(
+        "Search query for APIs, Libraries, SDKs. " +
+        "Examples: 'React useState hook examples', 'Express.js middleware'"
+      ),
+    tokensNum: z
+      .number()
+      .min(1000)
+      .max(50000)
+      .default(5000)
+      .describe(
+        "Number of tokens to return (1000-50000). " +
+        "Lower for focused queries, higher for comprehensive docs."
+      ),
+  }),
+  
+  async execute(params, ctx) {
+    // 1️⃣ 請求權限
+    await ctx.ask({
+      permission: "codesearch",
+      patterns: [params.query],
+      always: ["*"],
+      metadata: {
+        query: params.query,
+        tokensNum: params.tokensNum,
+      },
+    })
+
+    // 2️⃣ 構建 MCP 請求 (使用 Exa 的 get_code_context_exa 工具)
+    const codeRequest: McpCodeRequest = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: "get_code_context_exa",  // Exa AI 的程式碼搜尋工具
+        arguments: {
+          query: params.query,
+          tokensNum: params.tokensNum || 5000,
+        },
+      },
+    }
+
+    // 3️⃣ 發送請求
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30000)  // 30 秒 timeout
+
+    try {
+      const response = await fetch(
+        `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.CONTEXT}`,
+        {
+          method: "POST",
+          headers: {
+            accept: "application/json, text/event-stream",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(codeRequest),
+          signal: AbortSignal.any([controller.signal, ctx.abort]),
+        }
+      )
+
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Code search error (${response.status}): ${errorText}`)
+      }
+
+      // 4️⃣ 解析 SSE 回應
+      const responseText = await response.text()
+      const lines = responseText.split("\n")
+      
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const data: McpCodeResponse = JSON.parse(line.substring(6))
+          if (data.result?.content?.length > 0) {
+            return {
+              output: data.result.content[0].text,
+              title: `Code search: ${params.query}`,
+              metadata: {},
+            }
+          }
+        }
+      }
+
+      // 沒找到結果
+      return {
+        output: "No code snippets or documentation found. " +
+                "Please try a different query or check the spelling.",
+        title: `Code search: ${params.query}`,
+        metadata: {},
+      }
+    } catch (error) {
+      clearTimeout(timeoutId)
+      
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error("Code search request timed out")
+      }
+      throw error
+    }
+  },
+})
+```
+
+##### CodeSearch vs WebSearch 比較
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                     💻 CodeSearch vs 🔍 WebSearch 比較                           │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│   ┌────────────────────────────────┬────────────────────────────────┐          │
+│   │        CodeSearch              │         WebSearch              │          │
+│   ├────────────────────────────────┼────────────────────────────────┤          │
+│   │                                │                                │          │
+│   │  🎯 用途                        │  🎯 用途                        │          │
+│   │  程式碼範例、API 文件          │  一般網頁搜尋、新聞             │          │
+│   │  SDK 用法、Library 教學        │  文章、部落格、任何網頁         │          │
+│   │                                │                                │          │
+│   ├────────────────────────────────┼────────────────────────────────┤          │
+│   │                                │                                │          │
+│   │  🛠️ Exa AI 工具名稱             │  🛠️ Exa AI 工具名稱             │          │
+│   │  get_code_context_exa          │  web_search_exa                │          │
+│   │                                │                                │          │
+│   ├────────────────────────────────┼────────────────────────────────┤          │
+│   │                                │                                │          │
+│   │  📊 Token 控制                  │  📊 結果數量控制                │          │
+│   │  tokensNum: 1000~50000         │  numResults: 預設 8            │          │
+│   │  (控制返回內容量)              │  (控制返回幾筆結果)            │          │
+│   │                                │                                │          │
+│   ├────────────────────────────────┼────────────────────────────────┤          │
+│   │                                │                                │          │
+│   │  ⏱️ Timeout                     │  ⏱️ Timeout                     │          │
+│   │  30 秒                         │  25 秒                         │          │
+│   │                                │                                │          │
+│   ├────────────────────────────────┼────────────────────────────────┤          │
+│   │                                │                                │          │
+│   │  📝 適合查詢範例                │  📝 適合查詢範例                │          │
+│   │  - "React useState examples"   │  - "TypeScript 5.0 release"   │          │
+│   │  - "Python pandas merge"       │  - "Node.js 2024 updates"     │          │
+│   │  - "Next.js app router"        │  - "Bun vs Deno comparison"   │          │
+│   │  - "Express middleware auth"   │  - "AI coding assistant news" │          │
+│   │                                │                                │          │
+│   └────────────────────────────────┴────────────────────────────────┘          │
+│                                                                                 │
+│   ═══════════════════════════════════════════════════════════════════════      │
+│                              什麼時候用哪個？                                    │
+│   ═══════════════════════════════════════════════════════════════════════      │
+│                                                                                 │
+│   🔵 CodeSearch:                                                                │
+│      - "這個 API 怎麼用？"                                                      │
+│      - "給我 React hooks 範例"                                                  │
+│      - "Bun.serve() 的參數有哪些？"                                             │
+│      - 任何需要程式碼範例的問題                                                 │
+│                                                                                 │
+│   🟢 WebSearch:                                                                 │
+│      - "最新的 AI 新聞"                                                         │
+│      - "2024 年最受歡迎的 JS 框架"                                              │
+│      - "OpenAI 最新公告"                                                        │
+│      - 任何需要最新資訊的問題                                                   │
+│                                                                                 │
+│   🟡 WebFetch:                                                                  │
+│      - "讀取這個 URL 的內容"                                                    │
+│      - "把這個網頁轉成 Markdown"                                                │
+│      - 已經知道 URL，只需要抓取內容                                             │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+##### 三個外部工具的關係圖
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                     🌐 外部服務工具整合架構                                       │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│                              OpenCode Agent                                     │
+│                                   │                                             │
+│          ┌────────────────────────┼────────────────────────┐                   │
+│          │                        │                        │                   │
+│          ▼                        ▼                        ▼                   │
+│   ┌──────────────┐         ┌──────────────┐         ┌──────────────┐          │
+│   │   WebFetch   │         │  WebSearch   │         │  CodeSearch  │          │
+│   │              │         │              │         │              │          │
+│   │  🌐 網頁擷取  │         │  🔍 網頁搜尋  │         │  💻 程式碼搜尋 │          │
+│   │              │         │              │         │              │          │
+│   │  直接 HTTP   │         │  Exa AI MCP  │         │  Exa AI MCP  │          │
+│   │  GET Request │         │   Endpoint   │         │   Endpoint   │          │
+│   └──────┬───────┘         └──────┬───────┘         └──────┬───────┘          │
+│          │                        │                        │                   │
+│          │                        └────────┬───────────────┘                   │
+│          │                                 │                                    │
+│          ▼                                 ▼                                    │
+│   ┌──────────────┐              ┌───────────────────────┐                      │
+│   │   任意網站    │              │   https://mcp.exa.ai  │                      │
+│   │              │              │                       │                      │
+│   │ docs.bun.sh │              │   ┌───────────────┐   │                      │
+│   │ github.com  │              │   │    Exa AI     │   │                      │
+│   │ medium.com  │              │   │  Search Engine │   │                      │
+│   │    ...      │              │   └───────────────┘   │                      │
+│   └──────────────┘              └───────────────────────┘                      │
+│                                                                                 │
+│   ═══════════════════════════════════════════════════════════════════════      │
+│                              共同特徵                                            │
+│   ═══════════════════════════════════════════════════════════════════════      │
+│                                                                                 │
+│   ✅ 權限系統: 都需要通過 ctx.ask() 請求權限                                    │
+│   ✅ Timeout:  都有 AbortController + 超時設定                                  │
+│   ✅ Abort:    都支援 ctx.abort 信號取消                                        │
+│   ✅ 格式化:   都返回統一的 { title, output, metadata } 格式                    │
+│                                                                                 │
+│   ═══════════════════════════════════════════════════════════════════════      │
+│                              權限設定                                            │
+│   ═══════════════════════════════════════════════════════════════════════      │
+│                                                                                 │
+│   // 在 opencode.json 中設定這些工具的權限                                      │
+│   {                                                                             │
+│     "permissions": {                                                            │
+│       "webfetch": "ask",     // 每次都詢問                                      │
+│       "websearch": "allow",  // 自動允許 (搜尋不會修改任何東西)                 │
+│       "codesearch": "allow"  // 自動允許                                        │
+│     }                                                                           │
+│   }                                                                             │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
 
 #### 5. Grep Tool (文字搜尋)
 
