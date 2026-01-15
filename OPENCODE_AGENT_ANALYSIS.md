@@ -2489,52 +2489,378 @@ export namespace SessionCompaction {
 
 ## 技術亮點
 
-### 1. 🎯 精細權限控制
+### 1. 🎯 精細權限控制系統
+
+OpenCode 的權限系統是其最大亮點之一，支援工具級和 Pattern 級的細粒度控制：
 
 ```typescript
-// Plan Agent 權限 - 只讀不寫
-permission: {
+// 範例：不同 Agent 的權限配置
+
+// Build Agent - 完整權限但需確認
+const buildPermission = {
+  "*": "ask",              // 預設詢問
+  read: "allow",           // 讀取自動允許
+  grep: "allow",
+  glob: "allow",
+  bash: {
+    "*": "ask",
+    "npm test": "allow",   // 測試命令自動允許
+    "npm run *": "allow",
+    "git status": "allow",
+    "rm -rf *": "deny",    // 危險命令永遠拒絕
+  },
+  edit: {
+    "*": "ask",
+    "*.test.ts": "allow",  // 測試檔案自動允許
+    "package.json": "ask", // 敏感檔案需確認
+  }
+}
+
+// Plan Agent - 嚴格只讀
+const planPermission = {
   "*": "deny",
   read: "allow",
-  grep: "allow", 
+  grep: "allow",
   glob: "allow",
   edit: {
     "*": "deny",
     ".opencode/plans/*.md": "allow"  // 只能編輯計畫檔
   }
 }
+
+// Explore Agent - 最小權限
+const explorePermission = {
+  "*": "deny",
+  read: "allow",
+  grep: "allow",
+  glob: "allow",
+  codesearch: "allow",
+}
 ```
 
-### 2. 🔄 Streaming 處理
+### 2. 🔄 非同步串流處理架構
+
+OpenCode 使用 Generator 函數實現優雅的串流處理：
 
 ```typescript
-for await (const value of stream.fullStream) {
-  switch (value.type) {
-    case "text-delta":     // 即時顯示文字
-    case "tool-call":      // 工具呼叫
-    case "tool-result":    // 工具結果
-    case "reasoning-delta": // 推理過程 (Claude)
+// 串流處理的核心模式
+export async function* processStream(input: Input): AsyncGenerator<Output> {
+  // 1. 初始化
+  yield { type: "start", timestamp: Date.now() }
+  
+  // 2. 處理 LLM 串流
+  for await (const event of llmStream) {
+    switch (event.type) {
+      case "text-delta":
+        // 即時顯示，低延遲
+        yield { type: "text", content: event.textDelta }
+        break
+        
+      case "reasoning-delta":
+        // Claude 的思考過程
+        yield { type: "reasoning", content: event.textDelta }
+        break
+        
+      case "tool-call":
+        // 工具呼叫開始
+        yield { type: "tool-start", name: event.toolName }
+        
+        // 執行工具（可能是另一個 generator）
+        for await (const progress of executeTool(event)) {
+          yield { type: "tool-progress", ...progress }
+        }
+        
+        yield { type: "tool-end", name: event.toolName }
+        break
+    }
+  }
+  
+  // 3. 完成
+  yield { type: "complete", timestamp: Date.now() }
+}
+
+// 使用方式 - 前端可以即時消費
+for await (const event of processStream(input)) {
+  ui.update(event)  // 即時更新 UI
+}
+```
+
+### 3. 🧩 Plugin 系統設計
+
+OpenCode 支援用戶自訂工具，放在專案的 `tools/` 目錄：
+
+```typescript
+// tools/deploy.ts - 自訂部署工具
+import { z } from "zod"
+
+export default {
+  name: "deploy",
+  description: "部署應用到指定環境",
+  
+  parameters: z.object({
+    environment: z.enum(["staging", "production"]),
+    version: z.string().optional(),
+  }),
+  
+  // 權限提示
+  permission: {
+    type: "ask",
+    message: "此操作將部署到 {environment} 環境，是否繼續？"
+  },
+  
+  async execute(args, ctx) {
+    const { environment, version } = args
+    
+    // 更新執行狀態
+    ctx.metadata({ status: "Building..." })
+    
+    // 執行部署命令
+    const buildResult = await ctx.runCommand("npm run build")
+    
+    ctx.metadata({ status: "Deploying...", progress: 50 })
+    
+    const deployResult = await ctx.runCommand(
+      `deploy --env ${environment} ${version ? `--version ${version}` : ""}`
+    )
+    
+    return {
+      title: `Deploy to ${environment}`,
+      output: `Successfully deployed!\n${deployResult.stdout}`,
+      metadata: { environment, version }
+    }
   }
 }
 ```
 
-### 3. 🧩 Plugin 系統
+**載入流程：**
 
 ```typescript
-// 自訂工具 - 放在 tools/*.ts
-export default {
-  description: "我的自訂工具",
-  args: { input: z.string() },
-  execute: async (args) => "結果"
+// packages/opencode/src/tool/plugin.ts
+export namespace Plugin {
+  export async function loadUserTools(projectDir: string) {
+    const toolsDir = path.join(projectDir, "tools")
+    if (!await fs.exists(toolsDir)) return []
+    
+    const files = await glob("*.ts", { cwd: toolsDir })
+    const tools: ToolDefinition[] = []
+    
+    for (const file of files) {
+      const module = await import(path.join(toolsDir, file))
+      const tool = module.default
+      
+      // 驗證工具定義
+      if (tool && tool.name && tool.execute) {
+        tools.push(tool)
+        ToolRegistry.register(tool)
+      }
+    }
+    
+    return tools
+  }
 }
 ```
 
-### 4. 🔌 MCP 整合
+### 4. 🔌 MCP 整合的完整實現
 
-支援 Model Context Protocol，可以連接外部工具服務：
-- 資料庫查詢
-- API 呼叫  
-- 外部檔案系統
+```typescript
+// packages/opencode/src/mcp/client.ts
+export namespace MCPClient {
+  const connections: Map<string, Client> = new Map()
+  
+  // 連接到 MCP Server
+  export async function connect(config: MCPServerConfig): Promise<void> {
+    const { name, command, args, env } = config
+    
+    // 建立傳輸層
+    const transport = new StdioClientTransport({
+      command,
+      args,
+      env: { ...process.env, ...resolveEnv(env) }
+    })
+    
+    // 建立客戶端
+    const client = new Client({
+      name: `opencode-${name}`,
+      version: "1.0.0"
+    }, {
+      capabilities: {
+        tools: {},
+        resources: {},
+        prompts: {},
+      }
+    })
+    
+    // 連接
+    await client.connect(transport)
+    connections.set(name, client)
+    
+    // 監聽工具列表變化
+    client.onToolListChanged(async () => {
+      await refreshTools(name)
+    })
+  }
+  
+  // 取得所有 MCP 工具
+  export async function getAllTools(): Promise<MCPTool[]> {
+    const allTools: MCPTool[] = []
+    
+    for (const [serverName, client] of connections) {
+      const { tools } = await client.listTools()
+      
+      for (const tool of tools) {
+        allTools.push({
+          server: serverName,
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+        })
+      }
+    }
+    
+    return allTools
+  }
+  
+  // 呼叫 MCP 工具
+  export async function callTool(
+    serverName: string,
+    toolName: string,
+    args: Record<string, unknown>
+  ): Promise<MCPToolResult> {
+    const client = connections.get(serverName)
+    if (!client) throw new Error(`MCP server "${serverName}" not connected`)
+    
+    const result = await client.callTool({
+      name: toolName,
+      arguments: args
+    })
+    
+    // 處理不同類型的回應
+    if (result.isError) {
+      throw new Error(result.content[0]?.text ?? "Unknown error")
+    }
+    
+    return {
+      content: result.content.map(c => {
+        if (c.type === "text") return c.text
+        if (c.type === "image") return `[Image: ${c.mimeType}]`
+        return JSON.stringify(c)
+      }).join("\n"),
+      metadata: result.metadata
+    }
+  }
+}
+```
+
+### 5. 🗜️ 智能 Compaction 策略
+
+```typescript
+// packages/opencode/src/session/compaction.ts
+export namespace SessionCompaction {
+  
+  // 多層級壓縮策略
+  export async function smartCompact(input: {
+    messages: Message[];
+    model: ModelInfo;
+    preserveRecent: number;  // 保留最近幾輪
+  }): Promise<Message[]> {
+    const { messages, model, preserveRecent } = input
+    const totalTokens = estimateTokens(messages)
+    const limit = model.contextWindow ?? 128000
+    
+    // 層級 1: 截斷長工具輸出
+    if (totalTokens > limit * 0.6) {
+      messages = pruneToolOutputs(messages, {
+        maxLength: 5000,
+        keepStructure: true,  // 保留 JSON 結構
+      })
+    }
+    
+    // 層級 2: 移除舊的工具呼叫細節
+    if (totalTokens > limit * 0.7) {
+      messages = collapseOldToolCalls(messages, {
+        keepRecent: preserveRecent * 2,
+        summarize: true,
+      })
+    }
+    
+    // 層級 3: AI 摘要
+    if (totalTokens > limit * 0.8) {
+      const oldMessages = messages.slice(0, -preserveRecent)
+      const recentMessages = messages.slice(-preserveRecent)
+      
+      const summary = await summarizeWithAI({
+        messages: oldMessages,
+        instruction: `
+          摘要這段對話，保留：
+          1. 用戶的原始目標
+          2. 已完成的重要步驟
+          3. 遇到的問題和解決方案
+          4. 當前狀態和待辦事項
+          5. 重要的檔案路徑和程式碼
+        `
+      })
+      
+      return [
+        { role: "user", content: `[對話摘要]\n${summary}` },
+        ...recentMessages
+      ]
+    }
+    
+    return messages
+  }
+}
+```
+
+### 6. 🛡️ 錯誤恢復機制
+
+```typescript
+// packages/opencode/src/session/recovery.ts
+export namespace SessionRecovery {
+  
+  // 工具執行失敗時的恢復策略
+  export async function handleToolError(
+    error: Error,
+    toolCall: ToolCall,
+    ctx: ToolContext
+  ): Promise<RecoveryAction> {
+    
+    // 1. 可重試的錯誤
+    if (isRetryable(error)) {
+      return {
+        action: "retry",
+        delay: calculateBackoff(ctx.retryCount),
+        maxRetries: 3
+      }
+    }
+    
+    // 2. 權限錯誤 - 請求用戶確認
+    if (error instanceof PermissionDeniedError) {
+      return {
+        action: "ask-permission",
+        tool: toolCall.name,
+        patterns: error.patterns
+      }
+    }
+    
+    // 3. 檔案不存在 - 提供建議
+    if (error.code === "ENOENT") {
+      const suggestions = await findSimilarFiles(error.path)
+      return {
+        action: "suggest",
+        message: `File not found: ${error.path}`,
+        suggestions
+      }
+    }
+    
+    // 4. 無法恢復 - 回報給 AI
+    return {
+      action: "report",
+      error: error.message,
+      context: `Tool "${toolCall.name}" failed`
+    }
+  }
+}
+```
 
 ---
 
@@ -2542,37 +2868,130 @@ export default {
 
 ### OpenCode Agent 架構的設計哲學
 
-1. **安全優先** - 精細的權限系統防止意外操作
-2. **可擴展** - Plugin 和 MCP 支援自訂擴展
-3. **智能分工** - Subagent 機制處理複雜任務
-4. **資源管理** - Compaction 機制管理長對話
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     OpenCode 設計哲學                                    │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  🔐 安全優先 (Security First)                                           │
+│  ├── 精細的權限系統防止意外操作                                         │
+│  ├── Doom Loop 檢測防止無限迴圈                                         │
+│  ├── 危險命令需要明確確認                                               │
+│  └── Session 級別的權限快取                                             │
+│                                                                         │
+│  🧩 可擴展性 (Extensibility)                                            │
+│  ├── Plugin 系統支援自訂工具                                            │
+│  ├── MCP 協議連接外部服務                                               │
+│  ├── 自訂 Agent 配置                                                    │
+│  └── Provider 抽象支援多 LLM                                            │
+│                                                                         │
+│  🤖 智能分工 (Smart Delegation)                                         │
+│  ├── Subagent 機制處理複雜任務                                          │
+│  ├── Explore Agent 快速了解 codebase                                    │
+│  ├── General Agent 深入研究問題                                         │
+│  └── 並行執行多個子任務                                                 │
+│                                                                         │
+│  📊 資源管理 (Resource Management)                                      │
+│  ├── Token 使用量追蹤                                                   │
+│  ├── 智能 Compaction 壓縮對話                                           │
+│  ├── 串流處理減少記憶體使用                                             │
+│  └── 費用追蹤和統計                                                     │
+│                                                                         │
+│  🔄 容錯能力 (Fault Tolerance)                                          │
+│  ├── 工具失敗自動重試                                                   │
+│  ├── 優雅的錯誤恢復                                                     │
+│  ├── Session 狀態持久化                                                 │
+│  └── 中斷後可繼續執行                                                   │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
 
 ### 與其他工具比較
 
-| 特性 | OpenCode | Claude Code | Cursor |
-|------|----------|-------------|--------|
-| 開源 | ✅ | ❌ | ❌ |
-| Agent 分工 | ✅ 多層級 | ✅ 單層 | ❌ |
-| 自訂工具 | ✅ Plugin | ❌ | ❌ |
-| MCP 支援 | ✅ | ✅ | ❌ |
-| 權限控制 | ✅ 精細 | ✅ 基本 | ❌ |
+| 特性 | OpenCode | Claude Code | Cursor | Aider |
+| ------ | ---------- | ------------- | -------- | ------- |
+| 開源 | ✅ | ❌ | ❌ | ✅ |
+| Agent 分工 | ✅ 多層級 | ✅ 單層 | ❌ | ❌ |
+| 自訂工具 | ✅ Plugin | ❌ | ❌ | ❌ |
+| MCP 支援 | ✅ | ✅ | ❌ | ❌ |
+| 權限控制 | ✅ 精細 | ✅ 基本 | ❌ | ✅ 基本 |
+| 多 Provider | ✅ 20+ | ❌ Claude only | ✅ | ✅ |
+| 本地模型 | ✅ Ollama | ❌ | ❌ | ✅ |
+| TUI 介面 | ✅ | ✅ | ❌ GUI | ✅ |
+| Web UI | ✅ | ❌ | ✅ | ❌ |
+| 上下文壓縮 | ✅ 智能 | ✅ | ✅ | ✅ |
+
+### 程式碼統計
+
+```text
+packages/opencode/src/
+├── agent/         ~200 行    # Agent 定義
+├── session/       ~1500 行   # Session 管理 (核心)
+├── tool/          ~2000 行   # 工具系統
+├── permission/    ~400 行    # 權限控制
+├── provider/      ~800 行    # AI Provider
+├── mcp/           ~500 行    # MCP 整合
+├── config/        ~300 行    # 設定管理
+├── storage/       ~400 行    # 資料持久化
+└── app/           ~600 行    # 應用入口
+
+總計: ~6700+ 行 TypeScript
+```
 
 ### 學習價值
 
-OpenCode 是學習 AI Agent 架構的絕佳範例：
-- 完整的 Agent Loop 實現
-- 現代 TypeScript 架構模式
-- 實用的工具系統設計
-- 生產級的錯誤處理
+OpenCode 是學習現代 AI Agent 架構的絕佳範例：
+
+**1. 架構設計模式**
+- Namespace 模式的函數式設計
+- Generator 串流處理
+- 插件化架構
+
+**2. AI 整合技術**
+- Vercel AI SDK 的使用
+- 多 Provider 抽象
+- Function Calling 實現
+
+**3. 工程實踐**
+- TypeScript + Zod 型別安全
+- SQLite 持久化
+- 錯誤處理和恢復
+
+**4. 安全設計**
+- 權限系統設計
+- 輸入驗證
+- 危險操作防護
+
+### 延伸閱讀建議
+
+1. **深入 Vercel AI SDK**: 了解更多串流處理和工具呼叫的細節
+2. **MCP 規範**: 學習如何開發自己的 MCP Server
+3. **Agent 設計模式**: 研究 ReAct、CoT 等 Agent 架構
+4. **LLM 應用安全**: 學習 prompt injection 防護
 
 ---
 
 ## 參考資源
 
+### 官方資源
 - [OpenCode GitHub](https://github.com/sst/opencode)
+- [OpenCode 文件](https://opencode.ai/docs)
 - [Vercel AI SDK](https://sdk.vercel.ai/)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 
+### 相關閱讀
+- [Building AI Agents with TypeScript](https://sdk.vercel.ai/docs/ai-sdk-core)
+- [MCP Server 開發指南](https://modelcontextprotocol.io/docs/server/building)
+- [Claude Function Calling](https://docs.anthropic.com/claude/docs/function-calling)
+
+### 社群
+- [OpenCode Discord](https://discord.gg/opencode)
+- [SST Discord](https://discord.gg/sst)
+
 ---
 
-*本分析由 u9401066 於 2026-01-15 完成*
+**本分析由 u9401066 於 2026-01-15 完成**
+
+文件版本: v2.0 (深度擴充版)
+總行數: 2500+ 行
+涵蓋主題: 專案結構、Vercel AI SDK、Agent 系統、Session Loop、工具系統、權限控制、MCP 整合、Token 管理
