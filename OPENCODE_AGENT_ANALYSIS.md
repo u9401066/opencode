@@ -8,18 +8,203 @@
 
 ## 📋 目錄
 
-1. [專案概述](#專案概述)
-2. [Vercel AI SDK 深度解析](#vercel-ai-sdk-深度解析)
-3. [Agent 架構設計](#agent-架構設計)
-4. [核心元件分析](#核心元件分析)
-5. [完整執行流程實例](#完整執行流程實例)
-6. [工具系統詳解](#工具系統詳解)
-7. [權限系統](#權限系統)
-8. [MCP 整合](#mcp-整合)
-9. [Token 管理與 Compaction](#token-管理與-compaction)
-10. [Meme 圖解](#meme-圖解)
-11. [技術亮點](#技術亮點)
-12. [結論](#結論)
+> 💡 **點擊連結可快速跳轉到對應章節**
+
+### 📚 主要章節
+
+| # | 章節 | 說明 |
+|---|------|------|
+| 1 | [專案概述](#專案概述) | 技術棧、專案結構、Namespace 模式 |
+| 2 | [Vercel AI SDK 深度解析](#vercel-ai-sdk-深度解析) | Provider、streamText、轉換層 |
+| 3 | [Agent 架構設計](#agent-架構設計) | 5 個內建 Agent、自訂配置 |
+| 4 | [核心元件分析](#核心元件分析) | Session、Message、Loop、狀態機 |
+| 5 | [完整執行流程實例](#完整執行流程實例) | 9 步驟、流程圖、時序圖 |
+| 6 | [工具系統詳解](#工具系統詳解) | 15+ 工具、並行執行 |
+| 7 | [錯誤處理完整路徑](#錯誤處理完整路徑) | 錯誤分類、恢復機制 |
+| 8 | [權限系統](#權限系統) | Ruleset、Doom Loop 防護 |
+| 9 | [MCP 整合](#mcp-整合) | 協議、OAuth、工具整合 |
+| 10 | [進階功能](#進階功能) | Snapshot、Revert、Share、Todo、Skill |
+| 11 | [基礎設施](#基礎設施) | Bus、LSP、Ripgrep、Config |
+| 12 | [Token 管理與 Compaction](#token-管理與-compaction) | 三層壓縮策略 |
+| 13 | [效能優化](#效能優化) | 快取、串流、記憶體管理 |
+| 14 | [Meme 圖解](#meme-圖解) | 趣味圖解 |
+| 15 | [技術亮點](#技術亮點) | 設計模式總結 |
+| 16 | [結論](#結論) | 比較、統計、學習價值 |
+| 17 | [參考資源](#參考資源) | 官方文件、延伸閱讀 |
+
+---
+
+### 📖 詳細子章節索引
+
+<details>
+<summary><strong>1. 專案概述</strong> (點擊展開)</summary>
+
+- [1.1 技術棧](#技術棧)
+- [1.2 專案結構詳解](#專案結構詳解)
+- [1.3 模組關係圖](#模組關係圖)
+
+</details>
+
+<details>
+<summary><strong>2. Vercel AI SDK 深度解析</strong> (點擊展開)</summary>
+
+- [2.1 為什麼選擇 Vercel AI SDK](#為什麼選擇-vercel-ai-sdk)
+- [2.2 支援的 Provider 列表](#支援的-provider-列表-20-家)
+- [2.3 核心函數 streamText()](#核心函數-streamtext-完整用法)
+- [2.4 Provider 載入機制](#provider-載入機制完整實現)
+- [2.5 Message 轉換層](#message-轉換層-transformts)
+- [2.6 串流事件類型詳解](#串流事件類型詳解)
+
+</details>
+
+<details>
+<summary><strong>3. Agent 架構設計</strong> (點擊展開)</summary>
+
+- [3.1 整體架構圖](#整體架構圖)
+- [3.2 Agent 定義完整實現](#agent-定義完整實現)
+- [3.3 內建 Agent 詳細設定](#內建-agent-詳細設定-5-個)
+- [3.4 自訂 Agent 配置](#自訂-agent-配置範例)
+
+</details>
+
+<details>
+<summary><strong>4. 核心元件分析</strong> (點擊展開)</summary>
+
+- [4.1 Session 管理](#session-管理)
+- [4.2 Message 儲存](#message-儲存)
+- [4.3 Session Loop 實現](#session-loop-完整實現)
+- [4.4 狀態機圖](#狀態機圖-state-machine)
+- [4.5 System Prompt 組合](#system-prompt-組合)
+
+</details>
+
+<details>
+<summary><strong>5. 完整執行流程實例</strong> (點擊展開)</summary>
+
+- [5.1 步驟詳解](#步驟-1-用戶輸入)
+- [5.2 完整流程圖](#完整流程圖)
+- [5.3 Mermaid 時序圖](#mermaid-時序圖)
+
+</details>
+
+<details>
+<summary><strong>6. 工具系統詳解</strong> (點擊展開)</summary>
+
+- [6.1 Tool.define() 核心介面](#tooldefine-核心介面)
+- [6.2 內建工具清單](#內建工具清單)
+- [6.3 工具實作範例](#工具實作範例)
+- [6.4 Tool Context 完整介面](#tool-context-完整介面)
+- [6.5 並行工具執行](#並行工具執行-parallel-tool-execution)
+
+</details>
+
+<details>
+<summary><strong>7. 錯誤處理完整路徑</strong> (點擊展開)</summary>
+
+- [7.1 錯誤分類](#錯誤分類)
+- [7.2 ErrorHandler 實現](#errorhandler-完整實現)
+- [7.3 錯誤恢復流程](#錯誤恢復流程圖)
+
+</details>
+
+<details>
+<summary><strong>8. 權限系統</strong> (點擊展開)</summary>
+
+- [8.1 權限規則結構](#權限規則結構)
+- [8.2 權限檢查流程](#權限檢查流程)
+- [8.3 權限請求處理](#權限請求處理)
+- [8.4 Doom Loop 防護](#doom-loop-防護)
+
+</details>
+
+<details>
+<summary><strong>9. MCP 整合</strong> (點擊展開)</summary>
+
+- [9.1 MCP 協議說明](#mcp-協議說明)
+- [9.2 設定範例](#mcp-設定範例)
+- [9.3 客戶端實現](#mcp-客戶端實現)
+
+</details>
+
+<details>
+<summary><strong>10. 進階功能 🆕</strong> (點擊展開)</summary>
+
+- [10.1 Snapshot 系統](#snapshot-系統)
+- [10.2 Session Revert](#session-revert)
+- [10.3 Session Share](#session-share)
+- [10.4 Todo 管理](#todo-管理)
+- [10.5 Skill 系統](#skill-系統)
+- [10.6 Retry 機制](#retry-機制)
+
+</details>
+
+<details>
+<summary><strong>11. 基礎設施 🆕</strong> (點擊展開)</summary>
+
+- [11.1 Bus 事件系統](#bus-事件系統)
+- [11.2 LSP 客戶端整合](#lsp-客戶端整合)
+- [11.3 Ripgrep 整合](#ripgrep-整合)
+- [11.4 Config 設定系統](#config-設定系統)
+- [11.5 Storage 持久化](#storage-持久化)
+
+</details>
+
+<details>
+<summary><strong>12. Token 管理與 Compaction</strong> (點擊展開)</summary>
+
+- [12.1 為什麼需要 Compaction](#為什麼需要-compaction)
+- [12.2 三層壓縮策略](#三層壓縮策略)
+- [12.3 Compaction 流程圖](#compaction-流程圖)
+
+</details>
+
+<details>
+<summary><strong>13. 效能優化</strong> (點擊展開)</summary>
+
+- [13.1 Provider 快取](#1-provider-回應快取-response-caching)
+- [13.2 檔案系統快取](#2-檔案系統快取-file-system-caching)
+- [13.3 串流批次處理](#3-串流處理優化-streaming-optimization)
+- [13.4 Token 估算](#4-token-估算優化)
+- [13.5 記憶體管理](#5-記憶體管理)
+
+</details>
+
+---
+
+### 🗺️ 視覺化導覽圖
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              📚 文件結構總覽                                     │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐  │
+│   │  1. 概述    │────▶│  2. AI SDK  │────▶│  3. Agent   │────▶│  4. 核心    │  │
+│   │  (入門)    │     │  (Provider) │     │  (設計)     │     │  (Session)  │  │
+│   └─────────────┘     └─────────────┘     └─────────────┘     └──────┬──────┘  │
+│                                                                      │         │
+│                                                                      ▼         │
+│   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐  │
+│   │  8. 權限    │◀────│  7. 錯誤    │◀────│  6. 工具    │◀────│  5. 流程    │  │
+│   │  (安全)    │     │  (處理)     │     │  (系統)     │     │  (實例)     │  │
+│   └──────┬──────┘     └─────────────┘     └─────────────┘     └─────────────┘  │
+│          │                                                                      │
+│          ▼                                                                      │
+│   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐  │
+│   │  9. MCP     │────▶│ 10. 進階    │────▶│ 11. 基礎    │────▶│ 12. Token   │  │
+│   │  (外部)    │     │  (功能)     │     │  (設施)     │     │  (壓縮)     │  │
+│   └─────────────┘     └─────────────┘     └─────────────┘     └──────┬──────┘  │
+│                                                                      │         │
+│                                                                      ▼         │
+│   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐  │
+│   │ 16. 結論   │◀────│ 15. 亮點    │◀────│ 14. Meme    │◀────│ 13. 效能    │  │
+│   │  (比較)    │     │  (總結)     │     │  (圖解)     │     │  (優化)     │  │
+│   └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘  │
+│                                                                                 │
+│   📌 建議閱讀順序: 1 → 2 → 3 → 4 → 5 (基礎) → 6 → 7 → 8 (進階) → 9+ (深入)     │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -40,45 +225,218 @@ OpenCode 是一個開源的 AI 編程助手，類似 Claude Code / Cursor，採�
 ### 專案結構詳解
 
 ```text
-packages/opencode/src/
-├── agent/                 # Agent 定義層
-│   ├── agent.ts          # Agent 類型定義與內建 agents
-│   └── index.ts          # 匯出入口
-│
-├── session/               # Session 管理層 (核心)
-│   ├── prompt.ts         # 🔑 主要 Loop 入口
-│   ├── processor.ts      # Stream 處理器
-│   ├── llm.ts            # LLM 呼叫封裝
-│   ├── system.ts         # System Prompt 組合
-│   ├── compaction.ts     # Token 壓縮機制
-│   └── message.ts        # 訊息儲存管理
-│
-├── tool/                  # 工具系統層
-│   ├── tool.ts           # Tool.define() 核心介面
-│   ├── registry.ts       # 工具註冊表
-│   ├── bash.ts           # Shell 命令工具
-│   ├── read.ts           # 檔案讀取工具
-│   ├── write.ts          # 檔案寫入工具
-│   ├── edit.ts           # 檔案編輯工具 (含多種 replacer)
-│   ├── grep.ts           # 文字搜尋工具
-│   ├── glob.ts           # 檔案列表工具
-│   ├── task.ts           # 子代理呼叫工具
-│   └── ...               # 其他工具
-│
-├── permission/            # 權限控制層
-│   ├── permission.ts     # 權限類型定義
-│   └── next.ts           # 權限檢查邏輯
-│
-├── provider/              # AI Provider 層
-│   ├── provider.ts       # 多 Provider 支援
-│   └── transform.ts      # 訊息轉換與快取
-│
-├── mcp/                   # MCP 整合層
-│   └── index.ts          # Model Context Protocol 客戶端
-│
-├── config/                # 設定管理
-│   └── config.ts         # opencode.json 解析
-│
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    packages/opencode/src/ 完整結構                               │
+│                          (120+ TypeScript 檔案)                                  │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│  📁 核心模組 (Core)                                                             │
+│  ├── agent/                      # Agent 定義層                                 │
+│  │   └── agent.ts               # Agent 類型定義與內建 agents                   │
+│  │                                                                              │
+│  ├── session/                    # Session 管理層 (核心 ⭐)                      │
+│  │   ├── prompt.ts              # 🔑 主要 Loop 入口                             │
+│  │   ├── processor.ts           # Stream 處理器                                 │
+│  │   ├── llm.ts                 # LLM 呼叫封裝                                  │
+│  │   ├── system.ts              # System Prompt 組合                            │
+│  │   ├── compaction.ts          # Token 壓縮機制                                │
+│  │   ├── message.ts             # 訊息儲存管理 v1                               │
+│  │   ├── message-v2.ts          # 訊息儲存管理 v2 (新)                          │
+│  │   ├── revert.ts              # Session 還原功能                              │
+│  │   ├── retry.ts               # 重試機制                                      │
+│  │   ├── status.ts              # 狀態管理                                      │
+│  │   ├── summary.ts             # 摘要生成                                      │
+│  │   └── todo.ts                # Todo 任務管理                                 │
+│  │                                                                              │
+│  └── provider/                   # AI Provider 層                               │
+│      ├── provider.ts            # 多 Provider 支援                              │
+│      ├── transform.ts           # 訊息轉換與快取                                │
+│      ├── models.ts              # 模型定義                                      │
+│      ├── auth.ts                # Provider 認證                                 │
+│      └── sdk/                   # 自訂 SDK                                      │
+│          └── openai-compatible/ # OpenAI 相容層                                 │
+│                                                                                 │
+│  📁 工具系統 (Tools)                                                            │
+│  ├── tool/                       # 工具系統層                                   │
+│  │   ├── tool.ts                # Tool.define() 核心介面                        │
+│  │   ├── registry.ts            # 工具註冊表                                    │
+│  │   ├── bash.ts                # Shell 命令工具                                │
+│  │   ├── read.ts                # 檔案讀取工具                                  │
+│  │   ├── write.ts               # 檔案寫入工具                                  │
+│  │   ├── edit.ts                # 檔案編輯工具                                  │
+│  │   ├── multiedit.ts           # 批次編輯工具                                  │
+│  │   ├── grep.ts                # 文字搜尋工具                                  │
+│  │   ├── glob.ts                # 檔案列表工具                                  │
+│  │   ├── ls.ts                  # 目錄列表工具                                  │
+│  │   ├── task.ts                # 子代理呼叫工具                                │
+│  │   ├── webfetch.ts            # 網頁抓取工具                                  │
+│  │   ├── websearch.ts           # 網路搜尋工具 (Exa)                            │
+│  │   ├── codesearch.ts          # 程式碼搜尋工具 (Exa)                          │
+│  │   ├── question.ts            # 互動問答工具                                  │
+│  │   ├── todo.ts                # Todo 管理工具                                 │
+│  │   ├── plan.ts                # 計畫工具                                      │
+│  │   ├── patch.ts               # Patch 工具                                    │
+│  │   ├── batch.ts               # 批次工具                                      │
+│  │   ├── skill.ts               # 技能呼叫工具                                  │
+│  │   ├── lsp.ts                 # LSP 診斷工具                                  │
+│  │   ├── invalid.ts             # 無效工具處理                                  │
+│  │   ├── truncation.ts          # 輸出截斷處理                                  │
+│  │   └── external-directory.ts  # 外部目錄存取                                  │
+│  │                                                                              │
+│  └── permission/                 # 權限控制層                                   │
+│      ├── permission.ts          # 權限類型定義                                  │
+│      ├── next.ts                # 權限檢查邏輯                                  │
+│      └── arity.ts               # 權限運算                                      │
+│                                                                                 │
+│  📁 外部整合 (Integration)                                                      │
+│  ├── mcp/                        # MCP 整合層                                   │
+│  │   ├── index.ts               # Model Context Protocol 客戶端                 │
+│  │   ├── auth.ts                # MCP OAuth 認證                                │
+│  │   ├── oauth-callback.ts      # OAuth 回調處理                                │
+│  │   └── oauth-provider.ts      # OAuth Provider                                │
+│  │                                                                              │
+│  ├── lsp/                        # LSP 客戶端                                   │
+│  │   ├── client.ts              # LSP 客戶端實現                                │
+│  │   ├── server.ts              # LSP Server 定義                               │
+│  │   ├── language.ts            # 語言映射                                      │
+│  │   └── index.ts               # 匯出入口                                      │
+│  │                                                                              │
+│  └── plugin/                     # 插件系統                                     │
+│      ├── index.ts               # 插件載入                                      │
+│      ├── codex.ts               # Codex 插件                                    │
+│      └── copilot.ts             # Copilot 插件                                  │
+│                                                                                 │
+│  📁 基礎設施 (Infrastructure)                                                   │
+│  ├── bus/                        # 事件系統                                     │
+│  │   ├── index.ts               # Bus 主模組                                    │
+│  │   ├── bus-event.ts           # 事件定義                                      │
+│  │   └── global.ts              # 全域事件                                      │
+│  │                                                                              │
+│  ├── config/                     # 設定管理                                     │
+│  │   ├── config.ts              # opencode.json 解析 (1000+ 行)                 │
+│  │   └── markdown.ts            # Markdown 設定解析                             │
+│  │                                                                              │
+│  ├── storage/                    # 資料持久化                                   │
+│  │   └── storage.ts             # SQLite 儲存                                   │
+│  │                                                                              │
+│  ├── file/                       # 檔案系統                                     │
+│  │   ├── index.ts               # 檔案操作                                      │
+│  │   ├── ignore.ts              # .gitignore 處理                               │
+│  │   ├── ripgrep.ts             # Ripgrep 整合 (搜尋)                           │
+│  │   ├── watcher.ts             # 檔案監視                                      │
+│  │   └── time.ts                # 時間處理                                      │
+│  │                                                                              │
+│  ├── snapshot/                   # 版本快照                                     │
+│  │   └── index.ts               # Git-based 快照系統                            │
+│  │                                                                              │
+│  ├── share/                      # 分享功能                                     │
+│  │   ├── share.ts               # Session 分享                                  │
+│  │   └── share-next.ts          # 新版分享                                      │
+│  │                                                                              │
+│  └── skill/                      # 技能系統                                     │
+│      ├── index.ts               # 技能入口                                      │
+│      └── skill.ts               # 技能定義與載入                                │
+│                                                                                 │
+│  📁 CLI 與 UI (Interface)                                                       │
+│  ├── cli/                        # 命令列介面                                   │
+│  │   ├── bootstrap.ts           # CLI 啟動                                      │
+│  │   ├── cmd/                   # 子命令                                        │
+│  │   │   ├── run.ts            # opencode run                                   │
+│  │   │   ├── serve.ts          # opencode serve                                 │
+│  │   │   ├── web.ts            # opencode web                                   │
+│  │   │   ├── session.ts        # opencode session                               │
+│  │   │   ├── models.ts         # opencode models                                │
+│  │   │   ├── mcp.ts            # opencode mcp                                   │
+│  │   │   ├── auth.ts           # opencode auth                                  │
+│  │   │   ├── export.ts         # opencode export                                │
+│  │   │   ├── import.ts         # opencode import                                │
+│  │   │   └── tui/              # TUI 元件                                       │
+│  │   └── ui.ts                  # UI 工具                                       │
+│  │                                                                              │
+│  ├── server/                     # HTTP Server                                  │
+│  │   ├── server.ts              # 主 Server                                     │
+│  │   ├── project.ts             # 專案 API                                      │
+│  │   ├── question.ts            # 問答 API                                      │
+│  │   ├── tui.ts                 # TUI Server                                    │
+│  │   ├── mdns.ts                # mDNS 服務發現                                 │
+│  │   └── error.ts               # 錯誤處理                                      │
+│  │                                                                              │
+│  └── format/                     # 格式化                                       │
+│      ├── index.ts               # 格式化入口                                    │
+│      └── formatter.ts           # 格式化器實現                                  │
+│                                                                                 │
+│  📁 工具函數 (Utilities)                                                        │
+│  └── util/                       # 工具函數庫                                   │
+│      ├── log.ts                 # 日誌系統                                      │
+│      ├── token.ts               # Token 計算                                    │
+│      ├── filesystem.ts          # 檔案系統工具                                  │
+│      ├── lazy.ts                # 延遲載入                                      │
+│      ├── lock.ts                # 鎖機制                                        │
+│      ├── queue.ts               # 佇列                                          │
+│      ├── timeout.ts             # 超時處理                                      │
+│      ├── signal.ts              # 信號處理                                      │
+│      ├── wildcard.ts            # 萬用字元匹配                                  │
+│      ├── rpc.ts                 # RPC 工具                                      │
+│      └── ...                    # 更多工具                                      │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 模組關係圖
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              模組依賴關係圖                                      │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│                           ┌──────────────┐                                      │
+│                           │     CLI      │                                      │
+│                           │  (入口點)    │                                      │
+│                           └──────┬───────┘                                      │
+│                                  │                                              │
+│                                  ▼                                              │
+│                    ┌─────────────────────────┐                                  │
+│                    │        Session          │                                  │
+│                    │  ┌─────────────────┐   │                                  │
+│                    │  │   prompt.ts     │◄──┼────── 主要入口                    │
+│                    │  │   (Loop 核心)   │   │                                  │
+│                    │  └────────┬────────┘   │                                  │
+│                    └───────────┼────────────┘                                  │
+│                                │                                                │
+│           ┌────────────────────┼────────────────────┐                          │
+│           │                    │                    │                          │
+│           ▼                    ▼                    ▼                          │
+│    ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                     │
+│    │   Agent     │     │   Provider  │     │    Tool     │                     │
+│    │  (定義)     │     │   (LLM)     │     │  (工具)     │                     │
+│    └─────────────┘     └──────┬──────┘     └──────┬──────┘                     │
+│                               │                    │                           │
+│                               ▼                    │                           │
+│                     ┌─────────────────┐            │                           │
+│                     │  Vercel AI SDK  │            │                           │
+│                     │  ├── Anthropic  │            │                           │
+│                     │  ├── OpenAI     │            │                           │
+│                     │  ├── Google     │            │                           │
+│                     │  └── ...        │            │                           │
+│                     └─────────────────┘            │                           │
+│                                                    │                           │
+│           ┌────────────────────┬───────────────────┘                           │
+│           │                    │                                               │
+│           ▼                    ▼                                               │
+│    ┌─────────────┐     ┌─────────────┐                                         │
+│    │ Permission  │     │    MCP      │                                         │
+│    │  (權限)     │     │ (外部工具)  │                                         │
+│    └─────────────┘     └─────────────┘                                         │
+│                                                                                 │
+│    ─────────────────── 基礎設施層 ───────────────────                           │
+│                                                                                 │
+│    ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐                      │
+│    │   Bus    │  │ Storage  │  │  Config  │  │   File   │                      │
+│    │ (事件)   │  │ (儲存)   │  │  (設定)  │  │ (檔案)   │                      │
+│    └──────────┘  └──────────┘  └──────────┘  └──────────┘                      │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
 ├── storage/               # 資料持久化
 │   ├── sqlite.ts         # SQLite 資料庫
 │   └── session.ts        # Session 儲存
@@ -3446,7 +3804,1416 @@ export namespace SessionCompaction {
 
 ---
 
-## Meme 圖解
+## 進階功能
+
+> 🆕 本章節涵蓋 OpenCode 的進階功能模組
+
+### Snapshot 系統
+
+Snapshot 系統提供 Git-based 的檔案版本控制，讓 Agent 可以追蹤和還原檔案變更。
+
+```typescript
+// packages/opencode/src/snapshot/index.ts
+
+export namespace Snapshot {
+  
+  // 追蹤檔案變更
+  export async function track(options: {
+    sessionID: string
+    messageID: string
+    file: string
+  }) {
+    const { sessionID, messageID, file } = options
+    
+    // 取得相對路徑
+    const root = App.info().path.root
+    const relative = path.relative(root, file)
+    
+    // 檢查檔案狀態
+    const exists = await Bun.file(file).exists()
+    const previous = exists ? await Bun.file(file).text() : undefined
+    
+    // 嘗試 Git 追蹤
+    try {
+      // git add 檔案
+      await $`git -C ${root} add -N ${relative}`
+    } catch {}
+    
+    // 儲存快照
+    await Storage.set({
+      key: ["snapshot", sessionID, messageID, file],
+      value: {
+        file,
+        relative,
+        previous,
+        time: Date.now(),
+      }
+    })
+  }
+  
+  // 產生 Patch (diff)
+  export async function patch(options: {
+    sessionID: string
+  }): Promise<string | undefined> {
+    const root = App.info().path.root
+    
+    // 取得所有追蹤的檔案
+    const tracked = await Storage.scan<Snapshot.Info>({
+      prefix: ["snapshot", options.sessionID]
+    })
+    
+    if (tracked.length === 0) return undefined
+    
+    // 使用 Git diff
+    const files = tracked.map(t => t.relative)
+    const result = await $`git -C ${root} diff -- ${files}`
+    
+    return result.stdout.toString()
+  }
+  
+  // 還原到特定訊息
+  export async function restore(options: {
+    sessionID: string
+    messageID: string
+  }) {
+    const snapshots = await Storage.scan<Snapshot.Info>({
+      prefix: ["snapshot", options.sessionID, options.messageID]
+    })
+    
+    for (const snapshot of snapshots) {
+      if (snapshot.previous !== undefined) {
+        // 還原到之前的內容
+        await Bun.write(snapshot.file, snapshot.previous)
+      } else {
+        // 之前不存在，刪除檔案
+        await fs.unlink(snapshot.file)
+      }
+    }
+  }
+  
+  // 還原所有變更
+  export async function revert(options: {
+    sessionID: string
+  }) {
+    const root = App.info().path.root
+    
+    // 取得所有快照
+    const snapshots = await Storage.scan<Snapshot.Info>({
+      prefix: ["snapshot", options.sessionID]
+    })
+    
+    // 分組處理
+    const toDelete: string[] = []  // 新建的檔案要刪除
+    const toRestore: { file: string; content: string }[] = []
+    
+    for (const snapshot of snapshots) {
+      if (snapshot.previous === undefined) {
+        toDelete.push(snapshot.file)
+      } else {
+        toRestore.push({
+          file: snapshot.file,
+          content: snapshot.previous
+        })
+      }
+    }
+    
+    // 執行還原
+    await Promise.all([
+      ...toDelete.map(f => fs.unlink(f).catch(() => {})),
+      ...toRestore.map(r => Bun.write(r.file, r.content))
+    ])
+    
+    // Git checkout
+    try {
+      const files = snapshots.map(s => s.relative)
+      await $`git -C ${root} checkout -- ${files}`
+    } catch {}
+  }
+  
+  // 計算變更的 diff
+  export async function diff(options: {
+    sessionID: string
+    file: string
+  }): Promise<string | undefined> {
+    const snapshot = await Storage.get<Snapshot.Info>({
+      key: ["snapshot", options.sessionID, "*", options.file]
+    })
+    
+    if (!snapshot) return undefined
+    
+    const current = await Bun.file(options.file).text()
+    const previous = snapshot.previous ?? ""
+    
+    // 使用 diff-match-patch 或類似工具
+    return createDiff(previous, current)
+  }
+}
+```
+
+### Session Revert
+
+Session Revert 提供對話歷史的還原功能，可以回退到任意訊息。
+
+```typescript
+// packages/opencode/src/session/revert.ts
+
+export namespace SessionRevert {
+  
+  // 還原到特定訊息
+  export async function revert(options: {
+    sessionID: string
+    messageID: string
+  }) {
+    const { sessionID, messageID } = options
+    
+    // 1. 找到目標訊息
+    const messages = await MessageV2.list({ sessionID })
+    const targetIndex = messages.findIndex(m => m.id === messageID)
+    
+    if (targetIndex === -1) {
+      throw new Error(`Message ${messageID} not found`)
+    }
+    
+    // 2. 備份要刪除的訊息
+    const toRemove = messages.slice(targetIndex + 1)
+    await Storage.set({
+      key: ["revert-backup", sessionID, Date.now()],
+      value: toRemove
+    })
+    
+    // 3. 刪除後續訊息
+    for (const msg of toRemove) {
+      await MessageV2.remove({
+        sessionID,
+        messageID: msg.id
+      })
+    }
+    
+    // 4. 還原檔案變更
+    await Snapshot.restore({
+      sessionID,
+      messageID
+    })
+    
+    // 5. 發布事件
+    Bus.publish(sessionID, {
+      type: "session.reverted",
+      properties: {
+        sessionID,
+        messageID,
+        removedCount: toRemove.length
+      }
+    })
+  }
+  
+  // 取消還原 (如果有備份)
+  export async function unrevert(options: {
+    sessionID: string
+  }) {
+    const backups = await Storage.scan<Message[]>({
+      prefix: ["revert-backup", options.sessionID]
+    })
+    
+    if (backups.length === 0) {
+      throw new Error("No revert backup found")
+    }
+    
+    // 取得最近的備份
+    const latest = backups[backups.length - 1]
+    
+    // 恢復訊息
+    for (const msg of latest) {
+      await MessageV2.put({
+        sessionID: options.sessionID,
+        message: msg
+      })
+    }
+  }
+  
+  // 清理備份
+  export async function cleanup(options: {
+    sessionID: string
+    keepLast?: number
+  }) {
+    const { sessionID, keepLast = 3 } = options
+    
+    const backups = await Storage.scan({
+      prefix: ["revert-backup", sessionID]
+    })
+    
+    // 保留最後 N 個
+    const toDelete = backups.slice(0, -keepLast)
+    
+    for (const key of toDelete) {
+      await Storage.remove({ key })
+    }
+  }
+}
+```
+
+### Session Share
+
+Session Share 讓用戶可以分享對話到 opencode.ai。
+
+```typescript
+// packages/opencode/src/share/share.ts
+
+export namespace Share {
+  
+  // 建立分享連結
+  export async function create(sessionID: string): Promise<string> {
+    // 1. 取得 Session 資料
+    const session = await Session.get(sessionID)
+    if (!session) throw new Error("Session not found")
+    
+    const messages = await MessageV2.list({ sessionID })
+    
+    // 2. 準備分享資料
+    const payload = {
+      title: session.title ?? "Untitled Session",
+      messages: messages.map(m => ({
+        role: m.role,
+        content: m.content,
+        toolCalls: m.toolCalls,
+        metadata: m.metadata
+      })),
+      summary: session.summary,
+      createdAt: session.time.created,
+      model: session.model
+    }
+    
+    // 3. 上傳到 API
+    const response = await fetch("https://api.opencode.ai/share", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${await Auth.getToken()}`
+      },
+      body: JSON.stringify(payload)
+    })
+    
+    if (!response.ok) {
+      throw new Error(`Share failed: ${response.statusText}`)
+    }
+    
+    const { id } = await response.json()
+    
+    // 4. 儲存分享 ID
+    await Session.update(sessionID, {
+      shareID: id,
+      sharedAt: Date.now()
+    })
+    
+    return `https://opencode.ai/share/${id}`
+  }
+  
+  // 同步更新分享內容
+  export async function sync(sessionID: string): Promise<void> {
+    const session = await Session.get(sessionID)
+    if (!session?.shareID) {
+      throw new Error("Session not shared")
+    }
+    
+    const messages = await MessageV2.list({ sessionID })
+    
+    await fetch(`https://api.opencode.ai/share/${session.shareID}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${await Auth.getToken()}`
+      },
+      body: JSON.stringify({
+        messages,
+        updatedAt: Date.now()
+      })
+    })
+  }
+  
+  // 取消分享
+  export async function revoke(sessionID: string): Promise<void> {
+    const session = await Session.get(sessionID)
+    if (!session?.shareID) return
+    
+    await fetch(`https://api.opencode.ai/share/${session.shareID}`, {
+      method: "DELETE",
+      headers: {
+        "Authorization": `Bearer ${await Auth.getToken()}`
+      }
+    })
+    
+    await Session.update(sessionID, {
+      shareID: null,
+      sharedAt: null
+    })
+  }
+}
+```
+
+### Todo 管理
+
+Todo 系統讓 Agent 可以建立和管理任務清單。
+
+```typescript
+// packages/opencode/src/session/todo.ts
+
+export namespace Todo {
+  
+  // Todo 資料結構
+  export const Info = z.object({
+    id: z.string(),
+    content: z.string(),
+    status: z.enum(["pending", "in_progress", "completed", "cancelled"]),
+    priority: z.enum(["low", "medium", "high"]).optional(),
+    createdAt: z.number(),
+    updatedAt: z.number(),
+  })
+  export type Info = z.infer<typeof Info>
+  
+  // 更新 Todo 列表
+  export async function update(
+    sessionID: string,
+    todos: Info[]
+  ): Promise<void> {
+    // 驗證資料
+    const validated = todos.map(t => Info.parse(t))
+    
+    // 儲存到 Session
+    await Storage.set({
+      key: ["todos", sessionID],
+      value: validated
+    })
+    
+    // 發布事件
+    Bus.publish(sessionID, {
+      type: "todos.updated",
+      properties: {
+        sessionID,
+        todos: validated,
+        count: {
+          total: validated.length,
+          pending: validated.filter(t => t.status === "pending").length,
+          completed: validated.filter(t => t.status === "completed").length
+        }
+      }
+    })
+  }
+  
+  // 取得 Todo 列表
+  export async function get(sessionID: string): Promise<Info[]> {
+    const todos = await Storage.get<Info[]>({
+      key: ["todos", sessionID]
+    })
+    return todos ?? []
+  }
+  
+  // 新增 Todo
+  export async function add(
+    sessionID: string,
+    todo: Omit<Info, "id" | "createdAt" | "updatedAt">
+  ): Promise<Info> {
+    const todos = await get(sessionID)
+    
+    const newTodo: Info = {
+      ...todo,
+      id: crypto.randomUUID(),
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    }
+    
+    await update(sessionID, [...todos, newTodo])
+    return newTodo
+  }
+  
+  // 更新單一 Todo 狀態
+  export async function setStatus(
+    sessionID: string,
+    todoID: string,
+    status: Info["status"]
+  ): Promise<void> {
+    const todos = await get(sessionID)
+    
+    const updated = todos.map(t => 
+      t.id === todoID 
+        ? { ...t, status, updatedAt: Date.now() }
+        : t
+    )
+    
+    await update(sessionID, updated)
+  }
+}
+```
+
+### Skill 系統
+
+Skill 系統讓用戶可以定義可重用的技能，透過 SKILL.md 檔案。
+
+```typescript
+// packages/opencode/src/skill/skill.ts
+
+export namespace Skill {
+  
+  // Skill 資料結構
+  export interface Info {
+    name: string
+    description: string
+    instructions: string
+    path: string
+    globs?: string[]
+  }
+  
+  // 掃描專案中的 Skill 檔案
+  export async function scan(projectPath: string): Promise<Info[]> {
+    const skills: Info[] = []
+    
+    // 搜尋所有 SKILL.md 或 *.skill.md 檔案
+    const files = await glob([
+      "**/SKILL.md",
+      "**/*.skill.md",
+      ".opencode/skills/*.md"
+    ], {
+      cwd: projectPath,
+      ignore: ["node_modules/**", ".git/**"]
+    })
+    
+    for (const file of files) {
+      const fullPath = path.join(projectPath, file)
+      const content = await Bun.file(fullPath).text()
+      
+      // 解析 Markdown frontmatter
+      const parsed = parseSkillMarkdown(content)
+      
+      if (parsed) {
+        skills.push({
+          name: parsed.name ?? path.basename(file, ".md"),
+          description: parsed.description ?? "",
+          instructions: parsed.content,
+          path: fullPath,
+          globs: parsed.globs
+        })
+      }
+    }
+    
+    return skills
+  }
+  
+  // 解析 Skill Markdown
+  function parseSkillMarkdown(content: string): {
+    name?: string
+    description?: string
+    globs?: string[]
+    content: string
+  } | null {
+    // 解析 YAML frontmatter
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)
+    
+    if (!frontmatterMatch) {
+      // 沒有 frontmatter，整個內容作為 instructions
+      return { content: content.trim() }
+    }
+    
+    const [, yaml, body] = frontmatterMatch
+    
+    try {
+      const metadata = parseYaml(yaml) as Record<string, unknown>
+      return {
+        name: metadata.name as string | undefined,
+        description: metadata.description as string | undefined,
+        globs: metadata.globs as string[] | undefined,
+        content: body.trim()
+      }
+    } catch {
+      return { content: content.trim() }
+    }
+  }
+  
+  // 轉換為 Claude 相容格式
+  export function toClaudeFormat(skills: Info[]): string {
+    if (skills.length === 0) return ""
+    
+    return `
+## Available Skills
+
+${skills.map(s => `
+### ${s.name}
+${s.description}
+
+<skill name="${s.name}">
+${s.instructions}
+</skill>
+`).join("\n")}
+
+You can use these skills by referencing them in your responses.
+`
+  }
+  
+  // 根據檔案路徑匹配相關 Skill
+  export function matchForFile(
+    skills: Info[],
+    filePath: string
+  ): Info[] {
+    return skills.filter(skill => {
+      if (!skill.globs || skill.globs.length === 0) return true
+      
+      return skill.globs.some(glob => 
+        minimatch(filePath, glob, { matchBase: true })
+      )
+    })
+  }
+}
+```
+
+### Retry 機制
+
+Retry 機制處理 API 呼叫失敗時的重試邏輯。
+
+```typescript
+// packages/opencode/src/session/retry.ts
+
+export namespace SessionRetry {
+  
+  // 計算重試延遲時間
+  export function delay(attempt: number): number {
+    // 指數退避: 1s, 2s, 4s, 8s, 16s, ... (最大 60s)
+    const base = 1000  // 1 秒
+    const maxDelay = 60000  // 60 秒
+    
+    const exponential = Math.min(
+      base * Math.pow(2, attempt),
+      maxDelay
+    )
+    
+    // 加入隨機抖動 (±20%)
+    const jitter = exponential * 0.2 * (Math.random() - 0.5)
+    
+    return Math.floor(exponential + jitter)
+  }
+  
+  // 重試包裝器
+  export async function withRetry<T>(
+    fn: () => Promise<T>,
+    options: {
+      maxAttempts?: number
+      retryIf?: (error: unknown) => boolean
+      onRetry?: (attempt: number, error: unknown) => void
+    } = {}
+  ): Promise<T> {
+    const {
+      maxAttempts = 3,
+      retryIf = isRetryable,
+      onRetry
+    } = options
+    
+    let lastError: unknown
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        return await fn()
+      } catch (error) {
+        lastError = error
+        
+        if (!retryIf(error) || attempt === maxAttempts - 1) {
+          throw error
+        }
+        
+        const waitTime = delay(attempt)
+        onRetry?.(attempt + 1, error)
+        
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+      }
+    }
+    
+    throw lastError
+  }
+  
+  // 判斷錯誤是否可重試
+  function isRetryable(error: unknown): boolean {
+    if (error instanceof Error) {
+      const message = error.message.toLowerCase()
+      
+      // 速率限制
+      if (message.includes("rate limit")) return true
+      if (message.includes("429")) return true
+      
+      // 暫時性錯誤
+      if (message.includes("timeout")) return true
+      if (message.includes("503")) return true
+      if (message.includes("502")) return true
+      
+      // 網路錯誤
+      if (message.includes("network")) return true
+      if (message.includes("econnreset")) return true
+    }
+    
+    return false
+  }
+}
+
+// 使用範例
+const result = await SessionRetry.withRetry(
+  () => streamText({ model, messages }),
+  {
+    maxAttempts: 3,
+    onRetry: (attempt, error) => {
+      console.log(`Retry attempt ${attempt}: ${error.message}`)
+    }
+  }
+)
+```
+
+---
+
+## 基礎設施
+
+> 🆕 本章節涵蓋 OpenCode 的基礎設施模組
+
+### Bus 事件系統
+
+Bus 系統提供發布/訂閱模式的事件傳遞機制。
+
+```typescript
+// packages/opencode/src/bus/index.ts
+
+export namespace Bus {
+  
+  // 事件類型定義
+  export type Event = {
+    type: string
+    properties: Record<string, unknown>
+  }
+  
+  // 訂閱者類型
+  type Subscriber = (event: Event) => void | Promise<void>
+  
+  // Session-scoped 訂閱者
+  const sessionSubscribers = new Map<string, Set<Subscriber>>()
+  
+  // Global 訂閱者
+  const globalSubscribers = new Set<Subscriber>()
+  
+  // 發布事件
+  export function publish(
+    sessionID: string,
+    event: Event
+  ): void {
+    // 通知 Session 訂閱者
+    const subscribers = sessionSubscribers.get(sessionID)
+    if (subscribers) {
+      for (const fn of subscribers) {
+        try {
+          fn(event)
+        } catch (error) {
+          console.error("Event subscriber error:", error)
+        }
+      }
+    }
+    
+    // 通知 Global 訂閱者
+    for (const fn of globalSubscribers) {
+      try {
+        fn({ ...event, properties: { ...event.properties, sessionID }})
+      } catch (error) {
+        console.error("Global subscriber error:", error)
+      }
+    }
+  }
+  
+  // 訂閱 Session 事件
+  export function subscribe(
+    sessionID: string,
+    handler: Subscriber
+  ): () => void {
+    if (!sessionSubscribers.has(sessionID)) {
+      sessionSubscribers.set(sessionID, new Set())
+    }
+    
+    sessionSubscribers.get(sessionID)!.add(handler)
+    
+    // 返回取消訂閱函數
+    return () => {
+      sessionSubscribers.get(sessionID)?.delete(handler)
+    }
+  }
+  
+  // 訂閱全域事件
+  export function subscribeGlobal(handler: Subscriber): () => void {
+    globalSubscribers.add(handler)
+    return () => globalSubscribers.delete(handler)
+  }
+  
+  // 清理 Session 訂閱
+  export function cleanup(sessionID: string): void {
+    sessionSubscribers.delete(sessionID)
+  }
+}
+
+// Global Bus 整合
+export namespace GlobalBus {
+  
+  const listeners: Map<string, Set<Function>> = new Map()
+  
+  export function on(event: string, handler: Function): () => void {
+    if (!listeners.has(event)) {
+      listeners.set(event, new Set())
+    }
+    listeners.get(event)!.add(handler)
+    return () => listeners.get(event)?.delete(handler)
+  }
+  
+  export function emit(event: string, data?: unknown): void {
+    listeners.get(event)?.forEach(fn => fn(data))
+    listeners.get("*")?.forEach(fn => fn({ event, data }))
+  }
+}
+```
+
+### LSP 客戶端整合
+
+LSP (Language Server Protocol) 客戶端提供程式碼分析功能。
+
+```typescript
+// packages/opencode/src/lsp/client.ts
+
+export namespace LSPClient {
+  
+  // LSP 連線實例
+  export interface Instance {
+    serverID: string
+    connection: Connection
+    capabilities: ServerCapabilities
+  }
+  
+  const instances = new Map<string, Instance>()
+  
+  // 建立 LSP 客戶端
+  export async function create(options: {
+    serverID: string
+    command: string
+    args?: string[]
+    rootPath: string
+  }): Promise<Instance> {
+    const { serverID, command, args = [], rootPath } = options
+    
+    // 檢查是否已存在
+    if (instances.has(serverID)) {
+      return instances.get(serverID)!
+    }
+    
+    // 啟動 LSP Server 進程
+    const proc = Bun.spawn([command, ...args], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe"
+    })
+    
+    // 建立 JSON-RPC 連線
+    const connection = createConnection(
+      proc.stdout,
+      proc.stdin
+    )
+    
+    // 初始化
+    const initResult = await connection.sendRequest("initialize", {
+      processId: process.pid,
+      rootPath,
+      rootUri: `file://${rootPath}`,
+      capabilities: {
+        textDocument: {
+          synchronization: {
+            didOpen: true,
+            didClose: true,
+            didChange: TextDocumentSyncKind.Full
+          },
+          publishDiagnostics: {
+            relatedInformation: true
+          }
+        }
+      }
+    })
+    
+    await connection.sendNotification("initialized", {})
+    
+    const instance: Instance = {
+      serverID,
+      connection,
+      capabilities: initResult.capabilities
+    }
+    
+    instances.set(serverID, instance)
+    return instance
+  }
+  
+  // 取得診斷資訊
+  export async function getDiagnostics(
+    serverID: string,
+    uri: string
+  ): Promise<Diagnostic[]> {
+    const instance = instances.get(serverID)
+    if (!instance) {
+      throw new Error(`LSP server ${serverID} not found`)
+    }
+    
+    return new Promise((resolve) => {
+      const handler = (params: PublishDiagnosticsParams) => {
+        if (params.uri === uri) {
+          instance.connection.onNotification(
+            "textDocument/publishDiagnostics",
+            () => {}  // 移除監聽
+          )
+          resolve(params.diagnostics)
+        }
+      }
+      
+      instance.connection.onNotification(
+        "textDocument/publishDiagnostics",
+        handler
+      )
+    })
+  }
+  
+  // 通知檔案開啟
+  export async function didOpen(
+    serverID: string,
+    uri: string,
+    languageId: string,
+    content: string
+  ): Promise<void> {
+    const instance = instances.get(serverID)
+    if (!instance) return
+    
+    await instance.connection.sendNotification(
+      "textDocument/didOpen",
+      {
+        textDocument: {
+          uri,
+          languageId,
+          version: 1,
+          text: content
+        }
+      }
+    )
+  }
+  
+  // 通知檔案變更
+  export async function didChange(
+    serverID: string,
+    uri: string,
+    content: string,
+    version: number
+  ): Promise<void> {
+    const instance = instances.get(serverID)
+    if (!instance) return
+    
+    await instance.connection.sendNotification(
+      "textDocument/didChange",
+      {
+        textDocument: { uri, version },
+        contentChanges: [{ text: content }]
+      }
+    )
+  }
+  
+  // 關閉連線
+  export async function dispose(serverID: string): Promise<void> {
+    const instance = instances.get(serverID)
+    if (!instance) return
+    
+    await instance.connection.sendRequest("shutdown")
+    await instance.connection.sendNotification("exit")
+    
+    instances.delete(serverID)
+  }
+}
+```
+
+### Ripgrep 整合
+
+Ripgrep 整合提供高效能的檔案搜尋功能。
+
+```typescript
+// packages/opencode/src/file/ripgrep.ts
+
+export namespace Ripgrep {
+  
+  // 搜尋檔案內容
+  export async function search(options: {
+    pattern: string
+    path: string
+    globs?: string[]
+    ignore?: string[]
+    maxCount?: number
+    caseSensitive?: boolean
+  }): Promise<SearchResult[]> {
+    const {
+      pattern,
+      path,
+      globs = [],
+      ignore = [],
+      maxCount,
+      caseSensitive = false
+    } = options
+    
+    // 建立 rg 命令
+    const args = [
+      "--json",
+      caseSensitive ? "" : "-i",
+      maxCount ? `-m ${maxCount}` : "",
+      ...globs.flatMap(g => ["-g", g]),
+      ...ignore.flatMap(i => ["-g", `!${i}`]),
+      pattern,
+      path
+    ].filter(Boolean)
+    
+    const result = await $`rg ${args}`
+    
+    // 解析 JSON 輸出
+    const lines = result.stdout.toString().trim().split("\n")
+    const matches: SearchResult[] = []
+    
+    for (const line of lines) {
+      if (!line) continue
+      
+      const data = JSON.parse(line)
+      
+      if (data.type === "match") {
+        matches.push({
+          path: data.data.path.text,
+          lineNumber: data.data.line_number,
+          content: data.data.lines.text,
+          matches: data.data.submatches.map((m: any) => ({
+            start: m.start,
+            end: m.end,
+            text: m.match.text
+          }))
+        })
+      }
+    }
+    
+    return matches
+  }
+  
+  // 列出檔案
+  export async function files(options: {
+    path: string
+    globs?: string[]
+    ignore?: string[]
+    maxDepth?: number
+  }): Promise<string[]> {
+    const { path, globs = [], ignore = [], maxDepth } = options
+    
+    const args = [
+      "--files",
+      maxDepth ? `--max-depth ${maxDepth}` : "",
+      ...globs.flatMap(g => ["-g", g]),
+      ...ignore.flatMap(i => ["-g", `!${i}`]),
+      path
+    ].filter(Boolean)
+    
+    const result = await $`rg ${args}`
+    
+    return result.stdout.toString().trim().split("\n").filter(Boolean)
+  }
+  
+  // 產生目錄樹
+  export async function tree(options: {
+    path: string
+    maxDepth?: number
+    showHidden?: boolean
+  }): Promise<string> {
+    const { path: rootPath, maxDepth = 3, showHidden = false } = options
+    
+    // 使用 rg --files 取得檔案列表
+    const files = await Ripgrep.files({
+      path: rootPath,
+      maxDepth,
+      ignore: showHidden ? [] : [".*"]
+    })
+    
+    // 建構樹狀結構
+    const tree: Record<string, any> = {}
+    
+    for (const file of files) {
+      const relative = path.relative(rootPath, file)
+      const parts = relative.split(path.sep)
+      
+      let current = tree
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i]
+        if (i === parts.length - 1) {
+          // 檔案
+          current[part] = null
+        } else {
+          // 目錄
+          current[part] = current[part] ?? {}
+          current = current[part]
+        }
+      }
+    }
+    
+    // 格式化輸出
+    return formatTree(tree, "", true)
+  }
+  
+  // 格式化樹狀輸出
+  function formatTree(
+    node: Record<string, any>,
+    prefix: string,
+    isLast: boolean
+  ): string {
+    const entries = Object.entries(node)
+    let output = ""
+    
+    entries.forEach(([name, value], index) => {
+      const isLastEntry = index === entries.length - 1
+      const connector = isLastEntry ? "└── " : "├── "
+      const icon = value === null ? "📄" : "📁"
+      
+      output += `${prefix}${connector}${icon} ${name}\n`
+      
+      if (value !== null) {
+        const newPrefix = prefix + (isLastEntry ? "    " : "│   ")
+        output += formatTree(value, newPrefix, isLastEntry)
+      }
+    })
+    
+    return output
+  }
+}
+```
+
+### Config 設定系統
+
+Config 系統提供完整的設定管理，支援 opencode.json 和 Markdown 設定檔。
+
+```typescript
+// packages/opencode/src/config/config.ts
+
+export namespace Config {
+  
+  // MCP Local Server 設定
+  export const McpLocal = z.object({
+    type: z.literal("local").default("local"),
+    command: z.string(),
+    args: z.array(z.string()).default([]),
+    env: z.record(z.string()).default({}),
+    enabled: z.boolean().default(true)
+  })
+  
+  // MCP Remote Server 設定
+  export const McpRemote = z.object({
+    type: z.literal("remote"),
+    url: z.string(),
+    headers: z.record(z.string()).default({})
+  })
+  
+  // 權限設定
+  export const Permission = z.object({
+    allow: z.array(z.string()).default([]),
+    deny: z.array(z.string()).default([])
+  })
+  
+  // Agent 設定
+  export const AgentConfig = z.object({
+    disabled: z.boolean().default(false),
+    model: z.string().optional(),
+    maxTokens: z.number().optional(),
+    tools: z.object({
+      include: z.array(z.string()).optional(),
+      exclude: z.array(z.string()).optional()
+    }).optional()
+  })
+  
+  // Provider 設定
+  export const ProviderConfig = z.object({
+    apiKey: z.string().optional(),
+    baseURL: z.string().optional(),
+    headers: z.record(z.string()).optional()
+  })
+  
+  // 完整設定 Schema
+  export const Schema = z.object({
+    // 模型設定
+    model: z.string().optional(),
+    provider: z.string().optional(),
+    
+    // MCP Servers
+    mcpServers: z.record(
+      z.union([McpLocal, McpRemote])
+    ).default({}),
+    
+    // 權限
+    permissions: z.record(Permission).default({}),
+    
+    // Agent 配置
+    agents: z.record(AgentConfig).default({}),
+    
+    // Provider 配置
+    providers: z.record(ProviderConfig).default({}),
+    
+    // 快捷鍵
+    keybinds: z.record(z.string()).default({}),
+    
+    // 其他設定
+    theme: z.string().default("auto"),
+    history: z.object({
+      maxSessions: z.number().default(100),
+      retentionDays: z.number().default(30)
+    }).default({}),
+    
+    // 實驗性功能
+    experimental: z.record(z.boolean()).default({})
+  })
+  
+  export type Schema = z.infer<typeof Schema>
+  
+  // 設定快取
+  let configCache: Schema | null = null
+  let configPath: string | null = null
+  
+  // 載入設定
+  export async function load(projectPath: string): Promise<Schema> {
+    const filePath = path.join(projectPath, "opencode.json")
+    configPath = filePath
+    
+    // 檢查檔案是否存在
+    if (!await Bun.file(filePath).exists()) {
+      configCache = Schema.parse({})
+      return configCache
+    }
+    
+    // 讀取並解析
+    const content = await Bun.file(filePath).text()
+    const json = JSON.parse(content)
+    
+    configCache = Schema.parse(json)
+    return configCache
+  }
+  
+  // 取得設定
+  export function get(): Schema {
+    if (!configCache) {
+      throw new Error("Config not loaded. Call Config.load() first.")
+    }
+    return configCache
+  }
+  
+  // 更新設定
+  export async function update(
+    updates: Partial<Schema>
+  ): Promise<Schema> {
+    if (!configPath) {
+      throw new Error("Config not loaded")
+    }
+    
+    const current = get()
+    const merged = Schema.parse({ ...current, ...updates })
+    
+    await Bun.write(
+      configPath,
+      JSON.stringify(merged, null, 2)
+    )
+    
+    configCache = merged
+    return merged
+  }
+  
+  // 監聽設定變更
+  export function watch(
+    callback: (config: Schema) => void
+  ): () => void {
+    if (!configPath) {
+      throw new Error("Config not loaded")
+    }
+    
+    const watcher = fs.watch(configPath, async () => {
+      const newConfig = await load(path.dirname(configPath!))
+      callback(newConfig)
+    })
+    
+    return () => watcher.close()
+  }
+  
+  // 驗證設定
+  export function validate(config: unknown): Schema {
+    return Schema.parse(config)
+  }
+}
+
+// 設定檔範例
+/*
+{
+  "model": "claude-sonnet-4-20250514",
+  "provider": "anthropic",
+  
+  "mcpServers": {
+    "filesystem": {
+      "type": "local",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
+    },
+    "github": {
+      "type": "local",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    }
+  },
+  
+  "permissions": {
+    "build": {
+      "allow": ["read:*", "write:src/**"],
+      "deny": ["write:.env*", "bash:rm -rf *"]
+    }
+  },
+  
+  "agents": {
+    "build": {
+      "model": "claude-sonnet-4-20250514",
+      "maxTokens": 16384
+    },
+    "explore": {
+      "model": "claude-3-5-haiku-20241022",
+      "tools": {
+        "exclude": ["write", "bash"]
+      }
+    }
+  },
+  
+  "keybinds": {
+    "submit": "Enter",
+    "newline": "Shift+Enter",
+    "cancel": "Ctrl+C",
+    "clear": "Ctrl+L"
+  }
+}
+*/
+```
+
+### Storage 持久化
+
+Storage 系統提供基於 SQLite 的資料持久化功能。
+
+```typescript
+// packages/opencode/src/storage/storage.ts
+
+export namespace Storage {
+  
+  // 初始化資料庫
+  let db: Database | null = null
+  
+  export async function init(dbPath: string): Promise<void> {
+    db = new Database(dbPath)
+    
+    // 建立表格
+    db.run(`
+      CREATE TABLE IF NOT EXISTS storage (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `)
+    
+    db.run(`CREATE INDEX IF NOT EXISTS idx_key_prefix ON storage(key)`)
+  }
+  
+  // 儲存資料
+  export async function set<T>(options: {
+    key: (string | number)[]
+    value: T
+  }): Promise<void> {
+    const keyStr = options.key.join(":")
+    const now = Date.now()
+    
+    db!.run(`
+      INSERT INTO storage (key, value, created_at, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET
+        value = excluded.value,
+        updated_at = excluded.updated_at
+    `, [
+      keyStr,
+      JSON.stringify(options.value),
+      now,
+      now
+    ])
+  }
+  
+  // 讀取資料
+  export async function get<T>(options: {
+    key: (string | number)[]
+  }): Promise<T | undefined> {
+    const keyStr = options.key.join(":")
+    
+    const row = db!.query(`
+      SELECT value FROM storage WHERE key = ?
+    `).get(keyStr) as { value: string } | null
+    
+    if (!row) return undefined
+    
+    return JSON.parse(row.value) as T
+  }
+  
+  // 掃描資料 (prefix 查詢)
+  export async function scan<T>(options: {
+    prefix: (string | number)[]
+  }): Promise<T[]> {
+    const prefixStr = options.prefix.join(":") + ":"
+    
+    const rows = db!.query(`
+      SELECT value FROM storage 
+      WHERE key LIKE ?
+      ORDER BY key
+    `).all(`${prefixStr}%`) as { value: string }[]
+    
+    return rows.map(r => JSON.parse(r.value) as T)
+  }
+  
+  // 刪除資料
+  export async function remove(options: {
+    key: (string | number)[]
+  }): Promise<void> {
+    const keyStr = options.key.join(":")
+    
+    db!.run(`DELETE FROM storage WHERE key = ?`, [keyStr])
+  }
+  
+  // 批次刪除
+  export async function removeByPrefix(options: {
+    prefix: (string | number)[]
+  }): Promise<number> {
+    const prefixStr = options.prefix.join(":") + ":"
+    
+    const result = db!.run(`
+      DELETE FROM storage WHERE key LIKE ?
+    `, [`${prefixStr}%`])
+    
+    return result.changes
+  }
+  
+  // 清理過期資料
+  export async function cleanup(options: {
+    olderThan: number  // 毫秒
+  }): Promise<number> {
+    const threshold = Date.now() - options.olderThan
+    
+    const result = db!.run(`
+      DELETE FROM storage WHERE updated_at < ?
+    `, [threshold])
+    
+    return result.changes
+  }
+  
+  // 關閉資料庫
+  export function close(): void {
+    db?.close()
+    db = null
+  }
+}
+```
+
+---
 
 ### 🎭 OpenCode Agent 的一天
 
